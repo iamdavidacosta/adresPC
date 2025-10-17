@@ -1,0 +1,60 @@
+services:
+  # SQL Server
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: adres-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Your_strong_password_123"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Your_strong_password_123 -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - adres-network
+
+  # API ADRES
+  api:
+    build:
+      context: ./adres.api
+      dockerfile: Dockerfile
+    container_name: adres-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=AdresAuthDb;User ID=sa;Password=Your_strong_password_123;TrustServerCertificate=True;Encrypt=False"
+      # Configuración JWT para testing/desarrollo (sin validación de firma)
+      # TODO: Para producción, configurar AUTH_AUTHORITY, AUTH_AUDIENCE y AUTH_JWKS_URL reales
+      AUTH_USE_JWKS: "false"
+      # AUTH_AUTHORITY: "https://autentic.ejemplo"
+      # AUTH_AUDIENCE: "adres-api"
+      # AUTH_JWKS_URL: "https://autentic.ejemplo/.well-known/jwks.json"
+      # AUTH_PEM_PATH: "Keys/autentic_public.pem"  # Descomentar si usas PEM en vez de JWKS
+    ports:
+      - "8080:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - adres-network
+
+volumes:
+  sqlserver_data:
+    driver: local
+
+networks:
+  adres-network:
+    driver: bridge
