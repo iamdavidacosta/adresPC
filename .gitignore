@@ -3,6 +3,16 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# Environment files with sensitive data
+.env
+.env.local
+.env.*.local
+*.env
+!.env.staging
+!.env.production
+!adres-web/.env.staging
+!adres-web/.env.production
+
 # User-specific files
 *.rsuser
 *.suo
