@@ -1,53 +1,135 @@
-# ADRES.API - Backend con JWT y Autorización Local
+# 🏛️ ADRES - Sistema de Gestión
 
-API REST desarrollada en **ASP.NET Core 8** con autenticación JWT externa y autorización basada en roles y permisos locales almacenados en SQL Server.
+Sistema de gestión con autenticación externa JWT, autorización basada en roles y permisos, con frontend React y backend ASP.NET Core 8.
 
-## 🚀 Características
+---
 
-- ✅ Autenticación JWT (RS256) con JWKS o PEM público
-- ✅ Autorización local con roles y permisos en base de datos
-- ✅ Entity Framework Core con SQL Server
-- ✅ Swagger con soporte Bearer token
-- ✅ CORS configurado para frontend
-- ✅ Docker Compose para desarrollo y despliegue
-- ✅ Seed de datos inicial automático
-- ✅ Migraciones automáticas en startup
-
-## 📋 Requisitos Previos
-
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop)
-- [dotnet-ef CLI](https://learn.microsoft.com/en-us/ef/core/cli/dotnet) (para migraciones)
-
-## 📦 Estructura del Proyecto
+## � Estructura del Proyecto
 
 ```
 adres.api/
-├── Controllers/         # MeController, SecureController
-├── Data/               # DbContext y Seed
-├── Domain/             # Entidades: User, Role, Permission
-├── Services/           # UserDirectory
-├── Migrations/         # Migraciones de EF Core
-├── Dockerfile          # Imagen Docker de la API
-├── appsettings.json    # Configuración
-└── Program.cs          # Punto de entrada
+├── adres.api/              # 🔧 Backend - ASP.NET Core 8 API
+│   ├── Controllers/        # Controladores REST
+│   ├── Data/              # DbContext y Seed
+│   ├── Domain/            # Entidades (User, Role, Permission)
+│   ├── Services/          # Lógica de negocio
+│   ├── Migrations/        # Migraciones EF Core
+│   ├── Dockerfile         # Docker para API
+│   └── appsettings.json   # Configuración
+│
+├── adres-web/             # ⚛️ Frontend - React + Tailwind CSS
+│   ├── public/            # Archivos estáticos
+│   ├── src/
+│   │   ├── components/    # Componentes reutilizables (Button, Card)
+│   │   ├── pages/         # Páginas (HomePage, UserSelector, Dashboards)
+│   │   ├── services/      # Servicios API
+│   │   ├── lib/           # Utilidades
+│   │   ├── App.js         # Router principal
+│   │   └── index.js       # Punto de entrada
+│   ├── Dockerfile         # Docker para Frontend
+│   ├── package.json       # Dependencias npm
+│   └── tailwind.config.js # Configuración Tailwind
+│
+├── docker-compose.yml     # 🐳 Orquestación completa
+├── docker-compose.dev.yml # Desarrollo local
+├── docker-compose.prod.yml # Producción
+│
+├── .env.staging          # Variables de entorno - Staging
+├── .env.production       # Variables de entorno - Producción
+│
+├── DEPLOYMENT.md         # 📖 Guía de despliegue
+├── AUTHENTICATION_URLS.md # URLs para autenticador
+└── README.md             # Este archivo
 ```
 
-## 🛠️ Configuración Inicial
+---
 
-### 1. Instalar dotnet-ef (si no está instalado)
+## 🚀 Inicio Rápido
 
-```powershell
-dotnet tool install --global dotnet-ef
+### **Opción 1: Docker Compose (Recomendado)**
+
+```bash
+# Clonar repositorio
+git clone https://github.com/iamdavidacosta/adresPC.git
+cd adresPC
+
+# Levantar todos los servicios (Backend + Frontend + SQL Server)
+docker-compose up -d
+
+# Acceder a la aplicación
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8080
+# Swagger: http://localhost:8080/swagger
 ```
 
-### 2. Configurar JWT (TODO antes de desplegar)
+### **Opción 2: Desarrollo Local**
 
-Edita `appsettings.json` y ajusta estos valores según tu autenticador externo:
+#### **Backend**
+```bash
+cd adres.api
 
-```json
-"Jwt": {
-  "Authority": "https://tu-autenticador.com",        // TODO: Cambiar
+# Restaurar paquetes
+dotnet restore
+
+# Ejecutar migraciones
+dotnet ef database update
+
+# Ejecutar API
+dotnet run
+
+# API disponible en: http://localhost:8080
+```
+
+#### **Frontend**
+```bash
+cd adres-web
+
+# Instalar dependencias
+npm install
+
+# Iniciar servidor de desarrollo
+npm start
+
+# Frontend disponible en: http://localhost:3000
+```
+
+---
+
+## 🔧 Características
+
+### **Backend (ASP.NET Core 8)**
+- ✅ Autenticación JWT (RS256) con JWKS o PEM público
+- ✅ Autorización local con roles y permisos en SQL Server
+- ✅ Entity Framework Core con SQL Server
+- ✅ Swagger UI con soporte Bearer token
+- ✅ CORS configurado dinámicamente
+- ✅ Migraciones automáticas en startup
+- ✅ Seed de datos inicial
+- ✅ Health checks
+- ✅ Endpoints RESTful
+
+### **Frontend (React 18)**
+- ✅ React con Create React App
+- ✅ Tailwind CSS 3 para estilos
+- ✅ React Router 6 para navegación
+- ✅ Componentes estilo shadcn/ui
+- ✅ Lucide React para iconos
+- ✅ Autenticación con JWT
+- ✅ Dashboards diferenciados por rol
+- ✅ Usuarios dinámicos desde BD
+- ✅ Diseño responsive y minimalista
+
+---
+
+## 📋 Requisitos Previos
+
+- **Docker Desktop** 20.10+ (para deployment con contenedores)
+- **Node.js** 18+ y npm 9+ (para desarrollo frontend)
+- **.NET 8 SDK** (para desarrollo backend)
+- **SQL Server** 2019+ o Docker con imagen SQL Server
+- **Git** para control de versiones
+
+---
   "Audience": "adres-api",                            // TODO: Cambiar
   "UseJwks": true,
   "JwksUrl": "https://tu-autenticador.com/.well-known/jwks.json",  // TODO: Cambiar
