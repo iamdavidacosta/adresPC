@@ -10,8 +10,13 @@
 *.env
 !.env.staging
 !.env.production
+!.env.server
 !adres-web/.env.staging
 !adres-web/.env.production
+!adres-web/.env.server
+!adres.api/.env.staging
+!adres.api/.env.production
+!adres.api/.env.server
 
 # User-specific files
 *.rsuser

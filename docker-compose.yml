@@ -38,7 +38,6 @@ services:
       - ./adres.api/.env
     environment:
       ASPNETCORE_URLS: "http://+:8080"
-      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=${DB_NAME:-AdresDb};User ID=${DB_USER:-sa};Password=${SA_PASSWORD:-YourStrong@Passw0rd};TrustServerCertificate=True;Encrypt=False"
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:
