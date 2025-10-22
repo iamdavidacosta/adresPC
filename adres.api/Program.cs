@@ -169,24 +169,42 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    try
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    var context = services.GetRequiredService<AdresAuthDbContext>();
+    
+    // Reintentar conexión a base de datos con backoff
+    var maxRetries = 10;
+    var delay = TimeSpan.FromSeconds(5);
+    
+    for (int i = 1; i <= maxRetries; i++)
     {
-        var context = services.GetRequiredService<AdresAuthDbContext>();
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        
-        logger.LogInformation("Aplicando migraciones pendientes...");
-        await context.Database.MigrateAsync();
-        
-        logger.LogInformation("Ejecutando seed de datos...");
-        await DbSeeder.SeedAsync(context);
-        
-        logger.LogInformation("Base de datos lista ✅");
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "Error al inicializar la base de datos");
-        throw;
+        try
+        {
+            logger.LogInformation("Intento {Attempt}/{MaxRetries}: Conectando a SQL Server...", i, maxRetries);
+            
+            // Probar conexión
+            await context.Database.CanConnectAsync();
+            logger.LogInformation("✅ Conexión exitosa a SQL Server");
+            
+            logger.LogInformation("Aplicando migraciones pendientes...");
+            await context.Database.MigrateAsync();
+            
+            logger.LogInformation("Ejecutando seed de datos...");
+            await DbSeeder.SeedAsync(context);
+            
+            logger.LogInformation("Base de datos lista ✅");
+            break; // Salir del loop si todo salió bien
+        }
+        catch (Exception ex) when (i < maxRetries)
+        {
+            logger.LogWarning(ex, "❌ Intento {Attempt}/{MaxRetries} fallido. Reintentando en {Delay} segundos...", i, maxRetries, delay.TotalSeconds);
+            await Task.Delay(delay);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error al inicializar la base de datos después de {MaxRetries} intentos", maxRetries);
+            throw;
+        }
     }
 }
 
