@@ -33,8 +33,15 @@ builder.Services.AddDbContext<AdresAuthDbContext>(options =>
 builder.Services.AddScoped<IUserDirectory, UserDirectory>();
 
 // Configurar CORS
-var allowedOrigins = builder.Configuration.GetSection("AllowedCors").Get<string[]>() 
-    ?? new[] { "http://localhost:4200", "http://localhost:5173", "http://localhost:3000" };
+var allowedCorsEnv = Environment.GetEnvironmentVariable("ALLOWED_CORS");
+var allowedOrigins = !string.IsNullOrWhiteSpace(allowedCorsEnv)
+    ? allowedCorsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    : (builder.Configuration.GetSection("AllowedCors").Get<string[]>() 
+       ?? new[] { "http://localhost:4200", "http://localhost:5173", "http://localhost:3000" });
+
+// Log de CORS configurados
+Console.WriteLine($"🔒 CORS configurado para: {string.Join(", ", allowedOrigins)}");
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("LocalDev", policy =>
