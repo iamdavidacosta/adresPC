@@ -25,7 +25,8 @@ export default function UserSelector() {
       setUsers(usersFromDB);
       setError('');
     } catch (err) {
-      setError('Error al cargar usuarios. Verifica que la API esté ejecutándose en http://localhost:8080');
+      const apiUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080/api';
+      setError(`Error al cargar usuarios. Verifica que la API esté ejecutándose en ${apiUrl}`);
       console.error('Error cargando usuarios:', err);
     } finally {
       setLoadingUsers(false);
@@ -199,7 +200,7 @@ export default function UserSelector() {
             <p className="text-xs text-gray-600 leading-relaxed">
               <strong>Nota:</strong> Este simulador será reemplazado por tu proveedor de autenticación real
               (OAuth 2.0 / OpenID Connect) en producción. Asegúrate de que el backend esté corriendo en{' '}
-              <code className="px-2 py-0.5 bg-gray-100 rounded font-mono">http://localhost:8080</code>
+              <code className="px-2 py-0.5 bg-gray-100 rounded font-mono">{process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080/api'}</code>
             </p>
           </CardContent>
         </Card>
