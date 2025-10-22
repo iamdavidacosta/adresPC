@@ -35,8 +35,8 @@ cat .env
 
 Deberías ver:
 ```env
-FRONTEND_DOMAIN=http://adres-autenticacion.centralspike.com
-BACKEND_DOMAIN=http://adres-autenticacion-back.centralspike.com
+FRONTEND_DOMAIN=https://adres-autenticacion.centralspike.com
+BACKEND_DOMAIN=https://adres-autenticacion-back.centralspike.com
 ```
 
 ### **Archivo: `adres.api/.env` (backend)**
@@ -47,7 +47,7 @@ cat adres.api/.env
 
 Deberías ver:
 ```env
-ALLOWED_CORS=http://adres-autenticacion.centralspike.com,http://adres-autenticacion-back.centralspike.com
+ALLOWED_CORS=https://adres-autenticacion.centralspike.com,https://adres-autenticacion-back.centralspike.com
 ```
 
 ### **Archivo: `adres-web/.env` (frontend)**
@@ -58,7 +58,7 @@ cat adres-web/.env
 
 Deberías ver:
 ```env
-REACT_APP_API_BASE_URL=http://adres-autenticacion-back.centralspike.com/api
+REACT_APP_API_BASE_URL=https://adres-autenticacion-back.centralspike.com/api
 ```
 
 ---
@@ -85,9 +85,9 @@ docker compose logs -f
 
 | Servicio | URL |
 |----------|-----|
-| **Frontend** | http://adres-autenticacion.centralspike.com |
-| **Backend API** | http://adres-autenticacion-back.centralspike.com |
-| **Backend Swagger** | http://adres-autenticacion-back.centralspike.com/swagger |
+| **Frontend** | https://adres-autenticacion.centralspike.com |
+| **Backend API** | https://adres-autenticacion-back.centralspike.com |
+| **Backend Swagger** | https://adres-autenticacion-back.centralspike.com/swagger |
 
 ---
 
