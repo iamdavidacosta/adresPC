@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using adres.api.Services;
 using adres.api.Models;
 using System.Security.Claims;
+using System.Text;
 
 namespace adres.api.Controllers;
 
@@ -25,7 +26,129 @@ public class AdresAuthController : ControllerBase
     }
 
     /// <summary>
-    /// Endpoint de login con credenciales - Integración ADRES
+    /// Inicia el flujo de Authorization Code - Redirige a Autentic Sign
+    /// GET /api/AdresAuth/authorize
+    /// </summary>
+    [HttpGet("authorize")]
+    [AllowAnonymous]
+    public IActionResult Authorize([FromQuery] string? returnUrl = null)
+    {
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        var callbackUrl = _configuration["AdresAuth:RedirectUri"] 
+                         ?? $"{baseUrl}/auth/callback";
+        
+        var state = !string.IsNullOrWhiteSpace(returnUrl) 
+            ? Convert.ToBase64String(Encoding.UTF8.GetBytes(returnUrl))
+            : "";
+
+        var authUrl = _adresAuthService.GetAuthorizationUrl(callbackUrl, state);
+        
+        _logger.LogInformation("🔄 Redirigiendo a Autentic Sign: {AuthUrl}", authUrl);
+
+        return Redirect(authUrl);
+    }
+
+    /// <summary>
+    /// Callback del flujo Authorization Code - Intercambia el código por un token
+    /// GET /api/AdresAuth/callback
+    /// </summary>
+    [HttpGet("callback")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string? state = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                return BadRequest(new { error = "invalid_request", error_description = "Authorization code is required" });
+            }
+
+            _logger.LogInformation("📥 Callback recibido con código de autorización");
+
+            var redirectUri = _configuration["AdresAuth:RedirectUri"] 
+                            ?? $"{Request.Scheme}://{Request.Host}/auth/callback";
+
+            var authResponse = await _adresAuthService.ExchangeCodeForTokenAsync(code, redirectUri);
+
+            // Decodificar el state para obtener la URL de retorno
+            var returnUrl = "/";
+            if (!string.IsNullOrWhiteSpace(state))
+            {
+                try
+                {
+                    returnUrl = Encoding.UTF8.GetString(Convert.FromBase64String(state));
+                }
+                catch
+                {
+                    returnUrl = "/";
+                }
+            }
+
+            // Redirigir al frontend con el token
+            var frontendUrl = _configuration["AdresAuth:FrontendUrl"] 
+                            ?? "https://adres-autenticacion.centralspike.com";
+            
+            var redirectUrl = $"{frontendUrl}{returnUrl}?access_token={authResponse.AccessToken}";
+            
+            if (!string.IsNullOrWhiteSpace(authResponse.RefreshToken))
+            {
+                redirectUrl += $"&refresh_token={authResponse.RefreshToken}";
+            }
+
+            _logger.LogInformation("✅ Token obtenido, redirigiendo al frontend");
+
+            return Redirect(redirectUrl);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error procesando callback de autorización");
+            return BadRequest(new { error = "server_error", error_description = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Intercambia un código de autorización por tokens (para llamadas directas desde el frontend)
+    /// POST /api/AdresAuth/token
+    /// </summary>
+    [HttpPost("token")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ExchangeCode([FromBody] ExchangeCodeRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Code))
+            {
+                return BadRequest(new { error = "invalid_request", error_description = "Authorization code is required" });
+            }
+
+            var redirectUri = request.RedirectUri 
+                            ?? _configuration["AdresAuth:RedirectUri"]
+                            ?? $"{Request.Scheme}://{Request.Host}/auth/callback";
+
+            var authResponse = await _adresAuthService.ExchangeCodeForTokenAsync(request.Code, redirectUri);
+
+            return Ok(new
+            {
+                access_token = authResponse.AccessToken,
+                token_type = authResponse.TokenType,
+                expires_in = authResponse.ExpiresIn,
+                refresh_token = authResponse.RefreshToken,
+                scope = authResponse.Scope
+            });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { error = "invalid_grant", error_description = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error intercambiando código por token");
+            return StatusCode(500, new { error = "server_error", error_description = "Internal server error" });
+        }
+    }
+
+    /// <summary>
+    /// Endpoint de login con credenciales - Integración ADRES (DEPRECADO - usar Authorization Code)
     /// POST /api/AdresAuth/login
     /// </summary>
     [HttpPost("login")]
@@ -286,6 +409,12 @@ public class AdresAuthController : ControllerBase
 }
 
 // Modelos de request
+public class ExchangeCodeRequest
+{
+    public string Code { get; set; } = string.Empty;
+    public string? RedirectUri { get; set; }
+}
+
 public class RefreshTokenRequest
 {
     public string RefreshToken { get; set; } = string.Empty;

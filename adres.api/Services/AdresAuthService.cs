@@ -11,6 +11,8 @@ namespace adres.api.Services;
 public interface IAdresAuthService
 {
     Task<AdresAuthResponse> AuthenticateAsync(string username, string password);
+    Task<AdresAuthResponse> ExchangeCodeForTokenAsync(string code, string redirectUri);
+    string GetAuthorizationUrl(string redirectUri, string state = "");
     Task<AdresAuthResponse> RefreshTokenAsync(string refreshToken);
     Task<AdresTokenClaims> ValidateTokenAsync(string accessToken);
     Task<JwksResponse> GetJwksAsync();
@@ -91,6 +93,85 @@ public class AdresAuthService : IAdresAuthService
         {
             _logger.LogError(ex, "Error de conexión con servidor ADRES");
             throw new InvalidOperationException("Unable to connect to ADRES authentication server", ex);
+        }
+    }
+
+    /// <summary>
+    /// Genera la URL de autorización para el flujo Authorization Code
+    /// </summary>
+    public string GetAuthorizationUrl(string redirectUri, string state = "")
+    {
+        var authEndpoint = $"{AuthServerUrl}{_configuration["AdresAuth:AuthorizationEndpoint"] ?? "/connect/authorize"}";
+        
+        var queryParams = new Dictionary<string, string>
+        {
+            { "client_id", ClientId },
+            { "redirect_uri", redirectUri },
+            { "response_type", "code" },
+            { "scope", Scopes }
+        };
+
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            queryParams.Add("state", state);
+        }
+
+        var queryString = string.Join("&", queryParams.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
+        
+        return $"{authEndpoint}?{queryString}";
+    }
+
+    /// <summary>
+    /// Intercambia el código de autorización por un access token (Authorization Code Flow)
+    /// </summary>
+    public async Task<AdresAuthResponse> ExchangeCodeForTokenAsync(string code, string redirectUri)
+    {
+        try
+        {
+            var request = new Dictionary<string, string>
+            {
+                { "grant_type", "authorization_code" },
+                { "code", code },
+                { "redirect_uri", redirectUri },
+                { "client_id", ClientId }
+            };
+
+            // Solo agregar client_secret si está configurado
+            if (!string.IsNullOrWhiteSpace(ClientSecret))
+            {
+                request.Add("client_secret", ClientSecret);
+            }
+
+            var content = new FormUrlEncodedContent(request);
+            
+            _logger.LogInformation("Intercambiando código de autorización por token en {Endpoint}", TokenEndpoint);
+
+            var response = await _httpClient.PostAsync(TokenEndpoint, content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Error intercambiando código: {Status} - {Body}", response.StatusCode, responseBody);
+                
+                var errorResponse = JsonSerializer.Deserialize<AdresErrorResponse>(responseBody);
+                throw new UnauthorizedAccessException(errorResponse?.ErrorDescription ?? "Code exchange failed");
+            }
+
+            var authResponse = JsonSerializer.Deserialize<AdresAuthResponse>(responseBody);
+            
+            if (authResponse == null || string.IsNullOrEmpty(authResponse.AccessToken))
+            {
+                throw new InvalidOperationException("Invalid response from auth server");
+            }
+
+            _logger.LogInformation("✅ Código intercambiado exitosamente por token");
+            
+            return authResponse;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Error intercambiando código de autorización");
+            throw new InvalidOperationException("Unable to exchange authorization code", ex);
         }
     }
 
