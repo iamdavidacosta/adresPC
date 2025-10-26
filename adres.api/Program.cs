@@ -32,6 +32,9 @@ builder.Services.AddDbContext<AdresAuthDbContext>(options =>
 // Configurar servicios
 builder.Services.AddScoped<IUserDirectory, UserDirectory>();
 
+// Configurar HttpClient para AdresAuthService
+builder.Services.AddHttpClient<IAdresAuthService, AdresAuthService>();
+
 // Configurar CORS
 var allowedCorsEnv = Environment.GetEnvironmentVariable("ALLOWED_CORS");
 var allowedOrigins = !string.IsNullOrWhiteSpace(allowedCorsEnv)

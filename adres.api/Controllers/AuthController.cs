@@ -1,4 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using adres.api.Services;
+using adres.api.Models;
+using System.Security.Claims;
 
 namespace adres.api.Controllers;
 
@@ -8,11 +12,16 @@ public class AuthController : ControllerBase
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthController> _logger;
+    private readonly IAdresAuthService _adresAuthService;
 
-    public AuthController(IConfiguration configuration, ILogger<AuthController> logger)
+    public AuthController(
+        IConfiguration configuration, 
+        ILogger<AuthController> logger,
+        IAdresAuthService adresAuthService)
     {
         _configuration = configuration;
         _logger = logger;
+        _adresAuthService = adresAuthService;
     }
 
     /// <summary>
