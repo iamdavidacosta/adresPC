@@ -28,7 +28,7 @@ public class AdresAuthController : ControllerBase
     /// <summary>
     /// Inicia el flujo de Authorization Code - Redirige a Autentic Sign
     /// GET /api/AdresAuth/authorize
-    /// GET /api/AdresAuth/authorize?mode=testing (para recibir respuesta como página HTML con tokens)
+    /// GET /api/AdresAuth/authorize?mode=testing (para modo testing con callback del backend)
     /// </summary>
     [HttpGet("authorize")]
     [AllowAnonymous]
@@ -36,34 +36,43 @@ public class AdresAuthController : ControllerBase
     {
         var baseUrl = $"{Request.Scheme}://{Request.Host}";
         
-        // Si mode=testing, redirigir a un endpoint especial del backend que servirá como callback
-        string callbackUrl;
+        // Generar PKCE
+        var (authUrl, codeVerifier) = _adresAuthService.GetAuthorizationUrl(
+            _configuration["AdresAuth:RedirectUri"] ?? "https://adres-autenticacion.centralspike.com/auth/callback",
+            ""
+        );
+        
+        // Si mode=testing, usar callback del backend
         if (mode == "testing")
         {
-            callbackUrl = $"{Request.Scheme}://{Request.Host}/api/AdresAuth/callback-handler";
-        }
-        else
-        {
-            callbackUrl = _configuration["AdresAuth:RedirectUri"] 
-                         ?? "https://adres-autenticacion.centralspike.com/auth/callback";
+            var callbackUrl = $"{Request.Scheme}://{Request.Host}/api/AdresAuth/callback-handler";
+            (authUrl, codeVerifier) = _adresAuthService.GetAuthorizationUrl(callbackUrl, "");
+            
+            // Guardar code_verifier en sesión (solo para modo testing)
+            HttpContext.Session.SetString("pkce_code_verifier", codeVerifier);
+            
+            _logger.LogInformation("🔄 Redirigiendo a Autentic Sign con PKCE (modo testing, callback: {Callback})", callbackUrl);
+            return Redirect(authUrl);
         }
         
-        // Si mode=testing, agregamos un indicador especial en el state
+        // Modo normal: El frontend necesitará el code_verifier
+        // Lo pasamos como parámetro seguro en el state (encriptado en Base64)
         var stateData = new
         {
             returnUrl = returnUrl ?? "/",
-            mode = mode ?? "normal"
+            cv = codeVerifier // code_verifier
         };
         
         var stateJson = System.Text.Json.JsonSerializer.Serialize(stateData);
         var state = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateJson));
-
-        var (authUrl, codeVerifier) = _adresAuthService.GetAuthorizationUrl(callbackUrl, state);
         
-        // Guardar code_verifier en sesión (se necesitará en el callback)
-        HttpContext.Session.SetString("pkce_code_verifier", codeVerifier);
+        // Regenerar authUrl con el state que incluye el code_verifier
+        (authUrl, _) = _adresAuthService.GetAuthorizationUrl(
+            _configuration["AdresAuth:RedirectUri"] ?? "https://adres-autenticacion.centralspike.com/auth/callback",
+            state
+        );
         
-        _logger.LogInformation("🔄 Redirigiendo a Autentic Sign con PKCE (mode: {Mode}, callback: {Callback})", mode ?? "normal", callbackUrl);
+        _logger.LogInformation("🔄 Redirigiendo a Autentic Sign con PKCE (modo normal, code_verifier en state)");
 
         return Redirect(authUrl);
     }
