@@ -1,32 +1,27 @@
 # 🎨 Integración Frontend - Authorization Code con PKCE
 
-## 📋 Flujo Completo
+## 📋 Flujo Completo (SIMPLIFICADO)
 
 ```
-[Frontend] → Click "Iniciar Sesión"
-           → Redirige a: https://adres-autenticacion-back.centralspike.com/api/AdresAuth/authorize
+1. [Frontend] Botón "Iniciar Sesión" 
+   → window.location.href = 'https://adres-autenticacion-back.centralspike.com/api/AdresAuth/authorize'
 
-[Backend]  → Genera code_verifier y code_challenge (PKCE)
-           → Incluye code_verifier en el parámetro state (encriptado Base64)
-           → Redirige a: https://idp.autenticsign.com/connect/authorize?
-                client_id=...&
-                redirect_uri=https://adres-autenticacion.centralspike.com/auth/callback&
-                code_challenge=...&
-                state=BASE64_JSON
+2. [Backend /authorize]
+   → Genera code_verifier y code_challenge (PKCE)
+   → Incluye code_verifier en state (Base64 JSON: {returnUrl, cv})
+   → Redirige a Autentic Sign
 
-[Autentic] → Usuario ingresa credenciales
-           → Redirige a: https://adres-autenticacion.centralspike.com/auth/callback?
-                code=AUTHORIZATION_CODE&
-                state=BASE64_JSON
+3. [Autentic Sign]
+   → Usuario ingresa credenciales
+   → Redirige a: https://adres-autenticacion.centralspike.com/auth/callback?code=XXX&state=YYY
 
-[Frontend] → Recibe código y state en /auth/callback
-           → Decodifica state para obtener code_verifier
-           → POST a /api/AdresAuth/token con { code, codeVerifier }
-           → Recibe { access_token, refresh_token, expires_in }
-           → Guarda tokens en localStorage
-           → GET a /api/AdresAuth/me con Bearer token
-           → Obtiene datos del usuario
-           → Redirige según rol del usuario
+4. [Frontend /auth/callback]
+   → Decodifica state → obtiene code_verifier
+   → POST /api/AdresAuth/token {code, codeVerifier}
+   → Recibe {access_token, refresh_token}
+   → GET /api/AdresAuth/me con Bearer token
+   → Obtiene datos del usuario
+   → Redirige según rol
 ```
 
 ---
