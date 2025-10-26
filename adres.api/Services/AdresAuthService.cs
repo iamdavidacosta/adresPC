@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using adres.api.Models;
@@ -11,8 +12,8 @@ namespace adres.api.Services;
 public interface IAdresAuthService
 {
     Task<AdresAuthResponse> AuthenticateAsync(string username, string password);
-    Task<AdresAuthResponse> ExchangeCodeForTokenAsync(string code, string redirectUri);
-    string GetAuthorizationUrl(string redirectUri, string state = "");
+    Task<AdresAuthResponse> ExchangeCodeForTokenAsync(string code, string redirectUri, string codeVerifier);
+    (string authUrl, string codeVerifier) GetAuthorizationUrl(string redirectUri, string state = "");
     Task<AdresAuthResponse> RefreshTokenAsync(string refreshToken);
     Task<AdresTokenClaims> ValidateTokenAsync(string accessToken);
     Task<JwksResponse> GetJwksAsync();
@@ -97,18 +98,24 @@ public class AdresAuthService : IAdresAuthService
     }
 
     /// <summary>
-    /// Genera la URL de autorización para el flujo Authorization Code
+    /// Genera la URL de autorización para el flujo Authorization Code con PKCE
     /// </summary>
-    public string GetAuthorizationUrl(string redirectUri, string state = "")
+    public (string authUrl, string codeVerifier) GetAuthorizationUrl(string redirectUri, string state = "")
     {
         var authEndpoint = $"{AuthServerUrl}{_configuration["AdresAuth:AuthorizationEndpoint"] ?? "/connect/authorize"}";
+        
+        // Generar PKCE code_verifier y code_challenge
+        var codeVerifier = GenerateCodeVerifier();
+        var codeChallenge = GenerateCodeChallenge(codeVerifier);
         
         var queryParams = new Dictionary<string, string>
         {
             { "client_id", ClientId },
             { "redirect_uri", redirectUri },
             { "response_type", "code" },
-            { "scope", Scopes }
+            { "scope", Scopes },
+            { "code_challenge", codeChallenge },
+            { "code_challenge_method", "S256" }
         };
 
         if (!string.IsNullOrWhiteSpace(state))
@@ -118,13 +125,53 @@ public class AdresAuthService : IAdresAuthService
 
         var queryString = string.Join("&", queryParams.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
         
-        return $"{authEndpoint}?{queryString}";
+        var authUrl = $"{authEndpoint}?{queryString}";
+        
+        _logger.LogInformation("URL de autorización generada con PKCE");
+        
+        return (authUrl, codeVerifier);
     }
 
     /// <summary>
-    /// Intercambia el código de autorización por un access token (Authorization Code Flow)
+    /// Genera un code_verifier aleatorio para PKCE
     /// </summary>
-    public async Task<AdresAuthResponse> ExchangeCodeForTokenAsync(string code, string redirectUri)
+    private string GenerateCodeVerifier()
+    {
+        var randomBytes = new byte[32];
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(randomBytes);
+        }
+        return Base64UrlEncode(randomBytes);
+    }
+
+    /// <summary>
+    /// Genera el code_challenge a partir del code_verifier usando SHA256
+    /// </summary>
+    private string GenerateCodeChallenge(string codeVerifier)
+    {
+        using var sha256 = SHA256.Create();
+        var challengeBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(codeVerifier));
+        return Base64UrlEncode(challengeBytes);
+    }
+
+    /// <summary>
+    /// Codifica bytes en Base64 URL-safe (sin padding)
+    /// </summary>
+    private string Base64UrlEncode(byte[] input)
+    {
+        var base64 = Convert.ToBase64String(input);
+        // Convertir a Base64 URL-safe
+        base64 = base64.Replace("+", "-");
+        base64 = base64.Replace("/", "_");
+        base64 = base64.TrimEnd('=');
+        return base64;
+    }
+
+    /// <summary>
+    /// Intercambia el código de autorización por un access token (Authorization Code Flow con PKCE)
+    /// </summary>
+    public async Task<AdresAuthResponse> ExchangeCodeForTokenAsync(string code, string redirectUri, string codeVerifier)
     {
         try
         {
@@ -133,7 +180,8 @@ public class AdresAuthService : IAdresAuthService
                 { "grant_type", "authorization_code" },
                 { "code", code },
                 { "redirect_uri", redirectUri },
-                { "client_id", ClientId }
+                { "client_id", ClientId },
+                { "code_verifier", codeVerifier }
             };
 
             // Solo agregar client_secret si está configurado
@@ -144,7 +192,7 @@ public class AdresAuthService : IAdresAuthService
 
             var content = new FormUrlEncodedContent(request);
             
-            _logger.LogInformation("Intercambiando código de autorización por token en {Endpoint}", TokenEndpoint);
+            _logger.LogInformation("Intercambiando código de autorización por token en {Endpoint} con PKCE", TokenEndpoint);
 
             var response = await _httpClient.PostAsync(TokenEndpoint, content);
             var responseBody = await response.Content.ReadAsStringAsync();

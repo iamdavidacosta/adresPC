@@ -41,9 +41,12 @@ public class AdresAuthController : ControllerBase
             ? Convert.ToBase64String(Encoding.UTF8.GetBytes(returnUrl))
             : "";
 
-        var authUrl = _adresAuthService.GetAuthorizationUrl(callbackUrl, state);
+        var (authUrl, codeVerifier) = _adresAuthService.GetAuthorizationUrl(callbackUrl, state);
         
-        _logger.LogInformation("🔄 Redirigiendo a Autentic Sign: {AuthUrl}", authUrl);
+        // Guardar code_verifier en sesión (se necesitará en el callback)
+        HttpContext.Session.SetString("pkce_code_verifier", codeVerifier);
+        
+        _logger.LogInformation("🔄 Redirigiendo a Autentic Sign con PKCE");
 
         return Redirect(authUrl);
     }
@@ -65,10 +68,20 @@ public class AdresAuthController : ControllerBase
 
             _logger.LogInformation("📥 Callback recibido con código de autorización");
 
+            // Recuperar code_verifier de la sesión
+            var codeVerifier = HttpContext.Session.GetString("pkce_code_verifier");
+            if (string.IsNullOrWhiteSpace(codeVerifier))
+            {
+                return BadRequest(new { error = "invalid_request", error_description = "PKCE code verifier not found in session" });
+            }
+
             var redirectUri = _configuration["AdresAuth:RedirectUri"] 
                             ?? $"{Request.Scheme}://{Request.Host}/auth/callback";
 
-            var authResponse = await _adresAuthService.ExchangeCodeForTokenAsync(code, redirectUri);
+            var authResponse = await _adresAuthService.ExchangeCodeForTokenAsync(code, redirectUri, codeVerifier);
+            
+            // Limpiar code_verifier de la sesión
+            HttpContext.Session.Remove("pkce_code_verifier");
 
             // Decodificar el state para obtener la URL de retorno
             var returnUrl = "/";
@@ -121,11 +134,16 @@ public class AdresAuthController : ControllerBase
                 return BadRequest(new { error = "invalid_request", error_description = "Authorization code is required" });
             }
 
+            if (string.IsNullOrWhiteSpace(request.CodeVerifier))
+            {
+                return BadRequest(new { error = "invalid_request", error_description = "PKCE code verifier is required" });
+            }
+
             var redirectUri = request.RedirectUri 
                             ?? _configuration["AdresAuth:RedirectUri"]
                             ?? $"{Request.Scheme}://{Request.Host}/auth/callback";
 
-            var authResponse = await _adresAuthService.ExchangeCodeForTokenAsync(request.Code, redirectUri);
+            var authResponse = await _adresAuthService.ExchangeCodeForTokenAsync(request.Code, redirectUri, request.CodeVerifier);
 
             return Ok(new
             {
@@ -412,6 +430,7 @@ public class AdresAuthController : ControllerBase
 public class ExchangeCodeRequest
 {
     public string Code { get; set; } = string.Empty;
+    public string CodeVerifier { get; set; } = string.Empty;
     public string? RedirectUri { get; set; }
 }
 

@@ -35,6 +35,16 @@ builder.Services.AddScoped<IUserDirectory, UserDirectory>();
 // Configurar HttpClient para AdresAuthService
 builder.Services.AddHttpClient<IAdresAuthService, AdresAuthService>();
 
+// Configurar sesiones distribuidas en memoria para PKCE
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(10); // Tiempo de expiración de sesión
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+});
+
 // Configurar CORS
 var allowedCorsEnv = Environment.GetEnvironmentVariable("ALLOWED_CORS");
 var allowedOrigins = !string.IsNullOrWhiteSpace(allowedCorsEnv)
@@ -231,6 +241,9 @@ app.UseSwaggerUI(options =>
 app.MapGet("/", () => "ADRES.API lista 🚀");
 
 app.UseCors("LocalDev");
+
+// Habilitar sesiones
+app.UseSession();
 
 app.UseAuthentication();
 app.UseAuthorization();
