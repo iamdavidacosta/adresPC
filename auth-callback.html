@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procesando autenticación...</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 20px;
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        
+        .status {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+        
+        .token-container {
+            display: none;
+            margin-top: 30px;
+        }
+        
+        .token-label {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .token-box {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            word-break: break-all;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        
+        .copy-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+        
+        .copy-btn:hover {
+            background: #5568d3;
+        }
+        
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        
+        .info-box p {
+            margin: 5px 0;
+            color: #0d47a1;
+            font-size: 14px;
+        }
+        
+        code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner" id="spinner"></div>
+        <h1 id="title">Procesando autenticación...</h1>
+        <p class="status" id="status">Intercambiando código por token...</p>
+        
+        <div class="token-container" id="tokenContainer">
+            <div class="token-label">✅ Access Token:</div>
+            <div class="token-box" id="accessToken"></div>
+            <button class="copy-btn" onclick="copyToken('accessToken')">📋 Copiar Access Token</button>
+            
+            <div class="token-label" style="margin-top: 20px;">🔄 Refresh Token:</div>
+            <div class="token-box" id="refreshToken"></div>
+            <button class="copy-btn" onclick="copyToken('refreshToken')">📋 Copiar Refresh Token</button>
+            
+            <div class="info-box">
+                <p><strong>Cómo usar el token:</strong></p>
+                <p>Copia el Access Token y úsalo en tus requests:</p>
+                <p><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></p>
+                <p style="margin-top: 10px;">El token expira en: <strong id="expiresIn"></strong></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Extraer parámetros de la URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        const error = urlParams.get('error');
+        
+        const spinner = document.getElementById('spinner');
+        const title = document.getElementById('title');
+        const status = document.getElementById('status');
+        const tokenContainer = document.getElementById('tokenContainer');
+        
+        async function exchangeCode() {
+            if (error) {
+                showError(`Error de autenticación: ${error}`);
+                return;
+            }
+            
+            if (!code) {
+                showError('No se recibió código de autorización');
+                return;
+            }
+            
+            try {
+                // Decodificar state para obtener el code_verifier si está disponible
+                let stateData = {};
+                if (state) {
+                    try {
+                        const stateJson = atob(state);
+                        stateData = JSON.parse(stateJson);
+                    } catch (e) {
+                        console.log('State no es JSON, probablemente solo returnUrl');
+                    }
+                }
+                
+                // Intentar obtener code_verifier del localStorage (si el frontend lo guardó)
+                const codeVerifier = localStorage.getItem('pkce_code_verifier');
+                
+                if (!codeVerifier) {
+                    showError('No se encontró code_verifier. El flujo debe iniciarse desde el backend.');
+                    status.innerHTML = `
+                        <div style="margin-top: 20px; text-align: left;">
+                            <p><strong>❌ Error:</strong> El flujo PKCE requiere que guardes el code_verifier antes de iniciar.</p>
+                            <p style="margin-top: 10px;"><strong>Solución:</strong></p>
+                            <p>1. Navega a: <code>https://adres-autenticacion-back.centralspike.com/api/AdresAuth/authorize?mode=testing</code></p>
+                            <p>2. El backend manejará todo el flujo automáticamente</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                status.textContent = 'Intercambiando código por token...';
+                
+                // Llamar al backend para intercambiar el código
+                const response = await fetch('https://adres-autenticacion-back.centralspike.com/api/AdresAuth/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        code: code,
+                        codeVerifier: codeVerifier,
+                        redirectUri: 'https://adres-autenticacion.centralspike.com/auth/callback'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error_description || data.error || 'Error desconocido');
+                }
+                
+                // Limpiar code_verifier
+                localStorage.removeItem('pkce_code_verifier');
+                
+                // Guardar tokens
+                localStorage.setItem('access_token', data.access_token);
+                localStorage.setItem('refresh_token', data.refresh_token);
+                localStorage.setItem('token_expires_at', Date.now() + (data.expires_in * 1000));
+                
+                // Mostrar tokens
+                showSuccess(data);
+                
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+        
+        function showSuccess(data) {
+            spinner.style.display = 'none';
+            title.textContent = '✅ Autenticación Exitosa';
+            title.className = 'success';
+            status.textContent = 'Token obtenido correctamente';
+            status.className = 'status success';
+            
+            document.getElementById('accessToken').textContent = data.access_token;
+            document.getElementById('refreshToken').textContent = data.refresh_token || 'No disponible';
+            document.getElementById('expiresIn').textContent = `${data.expires_in} segundos (${Math.floor(data.expires_in / 60)} minutos)`;
+            
+            tokenContainer.style.display = 'block';
+        }
+        
+        function showError(message) {
+            spinner.style.display = 'none';
+            title.textContent = '❌ Error';
+            title.className = 'error';
+            status.textContent = message;
+            status.className = 'status error';
+        }
+        
+        function copyToken(elementId) {
+            const tokenElement = document.getElementById(elementId);
+            const token = tokenElement.textContent;
+            
+            navigator.clipboard.writeText(token).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copiado!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        }
+        
+        // Ejecutar al cargar
+        exchangeCode();
+    </script>
+</body>
+</html>

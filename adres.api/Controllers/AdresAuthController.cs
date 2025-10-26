@@ -28,28 +28,264 @@ public class AdresAuthController : ControllerBase
     /// <summary>
     /// Inicia el flujo de Authorization Code - Redirige a Autentic Sign
     /// GET /api/AdresAuth/authorize
+    /// GET /api/AdresAuth/authorize?mode=testing (para recibir respuesta como página HTML con tokens)
     /// </summary>
     [HttpGet("authorize")]
     [AllowAnonymous]
-    public IActionResult Authorize([FromQuery] string? returnUrl = null)
+    public IActionResult Authorize([FromQuery] string? returnUrl = null, [FromQuery] string? mode = null)
     {
         var baseUrl = $"{Request.Scheme}://{Request.Host}";
-        var callbackUrl = _configuration["AdresAuth:RedirectUri"] 
-                         ?? $"{baseUrl}/auth/callback";
         
-        var state = !string.IsNullOrWhiteSpace(returnUrl) 
-            ? Convert.ToBase64String(Encoding.UTF8.GetBytes(returnUrl))
-            : "";
+        // Si mode=testing, redirigir a un endpoint especial del backend que servirá como callback
+        string callbackUrl;
+        if (mode == "testing")
+        {
+            callbackUrl = $"{Request.Scheme}://{Request.Host}/api/AdresAuth/callback-handler";
+        }
+        else
+        {
+            callbackUrl = _configuration["AdresAuth:RedirectUri"] 
+                         ?? "https://adres-autenticacion.centralspike.com/auth/callback";
+        }
+        
+        // Si mode=testing, agregamos un indicador especial en el state
+        var stateData = new
+        {
+            returnUrl = returnUrl ?? "/",
+            mode = mode ?? "normal"
+        };
+        
+        var stateJson = System.Text.Json.JsonSerializer.Serialize(stateData);
+        var state = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateJson));
 
         var (authUrl, codeVerifier) = _adresAuthService.GetAuthorizationUrl(callbackUrl, state);
         
         // Guardar code_verifier en sesión (se necesitará en el callback)
         HttpContext.Session.SetString("pkce_code_verifier", codeVerifier);
         
-        _logger.LogInformation("🔄 Redirigiendo a Autentic Sign con PKCE");
+        _logger.LogInformation("🔄 Redirigiendo a Autentic Sign con PKCE (mode: {Mode}, callback: {Callback})", mode ?? "normal", callbackUrl);
 
         return Redirect(authUrl);
     }
+
+    /// <summary>
+    /// Callback handler especial para testing - Maneja el callback de Autentic Sign y muestra tokens
+    /// GET /api/AdresAuth/callback-handler
+    /// </summary>
+    [HttpGet("callback-handler")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CallbackHandler([FromQuery] string code, [FromQuery] string? state = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                return Content(GenerateErrorHtml("No se recibió código de autorización"), "text/html");
+            }
+
+            _logger.LogInformation("📥 Callback handler recibido con código");
+
+            // Recuperar code_verifier de la sesión
+            var codeVerifier = HttpContext.Session.GetString("pkce_code_verifier");
+            if (string.IsNullOrWhiteSpace(codeVerifier))
+            {
+                return Content(GenerateErrorHtml("PKCE code verifier not found in session. La sesión pudo haber expirado."), "text/html");
+            }
+
+            var redirectUri = $"{Request.Scheme}://{Request.Host}/api/AdresAuth/callback-handler";
+
+            var authResponse = await _adresAuthService.ExchangeCodeForTokenAsync(code, redirectUri, codeVerifier);
+            
+            // Limpiar code_verifier de la sesión
+            HttpContext.Session.Remove("pkce_code_verifier");
+
+            _logger.LogInformation("✅ Token obtenido exitosamente en callback handler");
+
+            // Retornar página HTML con los tokens
+            return Content(GenerateSuccessHtml(authResponse), "text/html");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error en callback handler");
+            return Content(GenerateErrorHtml(ex.Message), "text/html");
+        }
+    }
+
+    private string GenerateSuccessHtml(AdresAuthResponse response)
+    {
+        var expiresInMinutes = response.ExpiresIn / 60;
+        return @"
+<!DOCTYPE html>
+<html lang=""es"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>✅ Autenticación Exitosa</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+        }
+        h1 { color: #28a745; text-align: center; margin-bottom: 20px; }
+        .token-section { margin: 20px 0; }
+        .token-label { font-weight: bold; color: #333; margin-bottom: 8px; }
+        .token-box {
+            background: #f8f9fa;
+            border: 2px solid #28a745;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            word-break: break-all;
+            position: relative;
+        }
+        .copy-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+        .copy-btn:hover { background: #218838; }
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-top: 30px;
+            border-radius: 4px;
+        }
+        code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class=""container"">
+        <h1>✅ Autenticación Exitosa</h1>
+        
+        <div class=""token-section"">
+            <div class=""token-label"">🔑 Access Token:</div>
+            <div class=""token-box"" id=""accessToken"">" + response.AccessToken + @"</div>
+            <button class=""copy-btn"" onclick=""copyToken('accessToken')"">📋 Copiar Access Token</button>
+        </div>
+        
+        <div class=""token-section"">
+            <div class=""token-label"">🔄 Refresh Token:</div>
+            <div class=""token-box"" id=""refreshToken"">" + (response.RefreshToken ?? "No disponible") + @"</div>
+            <button class=""copy-btn"" onclick=""copyToken('refreshToken')"">📋 Copiar Refresh Token</button>
+        </div>
+        
+        <div class=""info-box"">
+            <p><strong>📊 Información del Token:</strong></p>
+            <p>• Tipo: " + response.TokenType + @"</p>
+            <p>• Expira en: " + response.ExpiresIn + @" segundos (" + expiresInMinutes + @" minutos)</p>
+            <p>• Scopes: " + response.Scope + @"</p>
+            <p style=""margin-top: 15px;""><strong>💡 Cómo usar:</strong></p>
+            <p>Copia el Access Token y úsalo en tus requests:</p>
+            <p><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></p>
+        </div>
+    </div>
+    
+    <script>
+        function copyToken(elementId) {
+            const tokenElement = document.getElementById(elementId);
+            const token = tokenElement.textContent;
+            navigator.clipboard.writeText(token).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copiado!';
+                setTimeout(() => btn.textContent = originalText, 2000);
+            });
+        }
+    </script>
+</body>
+</html>";
+    }
+
+    private string GenerateErrorHtml(string errorMessage)
+    {
+        return @"
+<!DOCTYPE html>
+<html lang=""es"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>❌ Error</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 { color: #dc3545; text-align: center; margin-bottom: 20px; }
+        .error-message {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            border-radius: 4px;
+            color: #721c24;
+        }
+        .retry-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+            font-size: 16px;
+        }
+        .retry-btn:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class=""container"">
+        <h1>❌ Error de Autenticación</h1>
+        <div class=""error-message"">
+            <p><strong>Error:</strong> " + errorMessage + @"</p>
+        </div>
+        <button class=""retry-btn"" onclick=""window.location.href='/api/AdresAuth/authorize?mode=testing'"">
+            🔄 Reintentar Autenticación
+        </button>
+    </div>
+</body>
+</html>";
+    }
+
 
     /// <summary>
     /// Callback del flujo Authorization Code - Intercambia el código por un token
