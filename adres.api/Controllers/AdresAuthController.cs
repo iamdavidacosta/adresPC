@@ -57,7 +57,7 @@ public class AdresAuthController : ControllerBase
     /// </summary>
     [HttpGet("callback")]
     [AllowAnonymous]
-    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string? state = null)
+    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string? state = null, [FromQuery] bool json = false)
     {
         try
         {
@@ -76,12 +76,28 @@ public class AdresAuthController : ControllerBase
             }
 
             var redirectUri = _configuration["AdresAuth:RedirectUri"] 
-                            ?? $"{Request.Scheme}://{Request.Host}/auth/callback";
+                            ?? $"{Request.Scheme}://{Request.Host}/api/AdresAuth/callback";
 
             var authResponse = await _adresAuthService.ExchangeCodeForTokenAsync(code, redirectUri, codeVerifier);
             
             // Limpiar code_verifier de la sesión
             HttpContext.Session.Remove("pkce_code_verifier");
+
+            _logger.LogInformation("✅ Token obtenido exitosamente");
+
+            // Si se solicita respuesta JSON (para testing)
+            if (json)
+            {
+                return Ok(new
+                {
+                    access_token = authResponse.AccessToken,
+                    token_type = authResponse.TokenType,
+                    expires_in = authResponse.ExpiresIn,
+                    refresh_token = authResponse.RefreshToken,
+                    scope = authResponse.Scope,
+                    message = "✅ Autenticación exitosa! Guarda el access_token para usarlo en tus requests."
+                });
+            }
 
             // Decodificar el state para obtener la URL de retorno
             var returnUrl = "/";
@@ -106,15 +122,16 @@ public class AdresAuthController : ControllerBase
             if (!string.IsNullOrWhiteSpace(authResponse.RefreshToken))
             {
                 redirectUrl += $"&refresh_token={authResponse.RefreshToken}";
+                redirectUrl += $"&expires_in={authResponse.ExpiresIn}";
             }
 
-            _logger.LogInformation("✅ Token obtenido, redirigiendo al frontend");
+            _logger.LogInformation("🔄 Redirigiendo al frontend: {FrontendUrl}", frontendUrl);
 
             return Redirect(redirectUrl);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error procesando callback de autorización");
+            _logger.LogError(ex, "❌ Error procesando callback de autorización");
             return BadRequest(new { error = "server_error", error_description = ex.Message });
         }
     }
