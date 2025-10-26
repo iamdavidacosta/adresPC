@@ -23,13 +23,15 @@ public class AdresAuthService : IAdresAuthService
     private readonly IConfiguration _configuration;
     private readonly ILogger<AdresAuthService> _logger;
 
-    private string AuthServerUrl => _configuration["AdresAuth:ServerUrl"] ?? "https://auth.adres.gov.co";
-    private string ClientId => _configuration["AdresAuth:ClientId"] ?? throw new InvalidOperationException("ClientId not configured");
-    private string ClientSecret => _configuration["AdresAuth:ClientSecret"] ?? throw new InvalidOperationException("ClientSecret not configured");
-    private string TokenEndpoint => $"{AuthServerUrl}/oauth/token";
-    private string JwksEndpoint => $"{AuthServerUrl}/.well-known/jwks.json";
-    private string RevokeEndpoint => $"{AuthServerUrl}/oauth/revoke";
-    private string IntrospectEndpoint => $"{AuthServerUrl}/oauth/introspect";
+    private string AuthServerUrl => _configuration["AdresAuth:ServerUrl"] ?? "https://idp.autenticsign.com";
+    private string ClientId => _configuration["AdresAuth:ClientId"] ?? "410c8553-f9e4-44b8-90e1-234dd7a8bcd4";
+    private string ClientSecret => _configuration["AdresAuth:ClientSecret"] ?? "";
+    private string TokenEndpoint => $"{AuthServerUrl}{_configuration["AdresAuth:TokenEndpoint"] ?? "/connect/token"}";
+    private string JwksEndpoint => $"{AuthServerUrl}{_configuration["AdresAuth:JwksEndpoint"] ?? "/.well-known/jwks.json"}";
+    private string RevokeEndpoint => $"{AuthServerUrl}{_configuration["AdresAuth:RevokeEndpoint"] ?? "/connect/revocation"}";
+    private string IntrospectEndpoint => $"{AuthServerUrl}{_configuration["AdresAuth:IntrospectEndpoint"] ?? "/connect/introspect"}";
+    private string UserInfoEndpoint => $"{AuthServerUrl}{_configuration["AdresAuth:UserInfoEndpoint"] ?? "/connect/userinfo"}";
+    private string Scopes => _configuration["AdresAuth:Scopes"] ?? "openid extended_profile";
 
     public AdresAuthService(HttpClient httpClient, IConfiguration configuration, ILogger<AdresAuthService> logger)
     {
@@ -37,7 +39,6 @@ public class AdresAuthService : IAdresAuthService
         _configuration = configuration;
         _logger = logger;
     }
-
     /// <summary>
     /// Autentica un usuario contra el servidor ADRES
     /// </summary>
@@ -51,9 +52,14 @@ public class AdresAuthService : IAdresAuthService
                 { "username", username },
                 { "password", password },
                 { "client_id", ClientId },
-                { "client_secret", ClientSecret },
-                { "scope", "openid profile email" }
+                { "scope", Scopes }
             };
+
+            // Solo agregar client_secret si está configurado
+            if (!string.IsNullOrWhiteSpace(ClientSecret))
+            {
+                request.Add("client_secret", ClientSecret);
+            }
 
             var content = new FormUrlEncodedContent(request);
             
@@ -64,7 +70,7 @@ public class AdresAuthService : IAdresAuthService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Error en autenticación ADRES: {Status} - {Body}", response.StatusCode, responseBody);
+                _logger.LogWarning("Error en autenticación Autentic Sign: {Status} - {Body}", response.StatusCode, responseBody);
                 
                 var errorResponse = JsonSerializer.Deserialize<AdresErrorResponse>(responseBody);
                 throw new UnauthorizedAccessException(errorResponse?.ErrorDescription ?? "Authentication failed");
@@ -99,9 +105,14 @@ public class AdresAuthService : IAdresAuthService
             {
                 { "grant_type", "refresh_token" },
                 { "refresh_token", refreshToken },
-                { "client_id", ClientId },
-                { "client_secret", ClientSecret }
+                { "client_id", ClientId }
             };
+
+            // Solo agregar client_secret si está configurado
+            if (!string.IsNullOrWhiteSpace(ClientSecret))
+            {
+                request.Add("client_secret", ClientSecret);
+            }
 
             var content = new FormUrlEncodedContent(request);
             var response = await _httpClient.PostAsync(TokenEndpoint, content);
@@ -139,9 +150,14 @@ public class AdresAuthService : IAdresAuthService
             var request = new Dictionary<string, string>
             {
                 { "token", accessToken },
-                { "client_id", ClientId },
-                { "client_secret", ClientSecret }
+                { "client_id", ClientId }
             };
+
+            // Solo agregar client_secret si está configurado
+            if (!string.IsNullOrWhiteSpace(ClientSecret))
+            {
+                request.Add("client_secret", ClientSecret);
+            }
 
             var content = new FormUrlEncodedContent(request);
             var response = await _httpClient.PostAsync(IntrospectEndpoint, content);
@@ -209,9 +225,14 @@ public class AdresAuthService : IAdresAuthService
             var request = new Dictionary<string, string>
             {
                 { "token", token },
-                { "client_id", ClientId },
-                { "client_secret", ClientSecret }
+                { "client_id", ClientId }
             };
+
+            // Solo agregar client_secret si está configurado
+            if (!string.IsNullOrWhiteSpace(ClientSecret))
+            {
+                request.Add("client_secret", ClientSecret);
+            }
 
             var content = new FormUrlEncodedContent(request);
             var response = await _httpClient.PostAsync(RevokeEndpoint, content);
