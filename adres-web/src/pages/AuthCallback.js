@@ -9,6 +9,14 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
+        // Prevenir múltiples ejecuciones
+        const processedKey = 'oauth_callback_processed';
+        if (sessionStorage.getItem(processedKey)) {
+          console.log('Callback ya procesado, redirigiendo...');
+          navigate('/dashboard');
+          return;
+        }
+
         // Obtener parámetros de la URL
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
@@ -33,6 +41,10 @@ export default function AuthCallback() {
           throw new Error('Code verifier no encontrado en el state');
         }
 
+        console.log('🔄 Intercambiando código por tokens...');
+        console.log('Code:', code.substring(0, 10) + '...');
+        console.log('Code Verifier:', codeVerifier.substring(0, 10) + '...');
+
         // Intercambiar el código por tokens
         const tokenResponse = await fetch('https://adres-autenticacion-back.centralspike.com/api/AdresAuth/token', {
           method: 'POST',
@@ -48,6 +60,12 @@ export default function AuthCallback() {
 
         if (!tokenResponse.ok) {
           const errorData = await tokenResponse.json();
+          console.error('❌ Error del servidor:', errorData);
+          
+          // Si el código ya fue usado o expiró
+          if (errorData.error === 'invalid_grant') {
+            throw new Error('El código de autenticación ya fue usado o expiró. Por favor, inicia sesión nuevamente.');
+          }
           throw new Error(errorData.message || 'Error al intercambiar el código por tokens');
         }
 
@@ -77,6 +95,11 @@ export default function AuthCallback() {
 
         // Guardar información del usuario en localStorage
         localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Marcar callback como procesado
+        sessionStorage.setItem(processedKey, 'true');
+        
+        console.log('✅ Autenticación completada exitosamente');
 
         // Redirigir según el rol del usuario
         if (userData.role === 'admin' || userData.role === 'Admin') {
@@ -88,7 +111,7 @@ export default function AuthCallback() {
         }
 
       } catch (err) {
-        console.error('Error en callback de autenticación:', err);
+        console.error('❌ Error en callback de autenticación:', err);
         setError(err.message);
         setLoading(false);
       }
@@ -121,12 +144,26 @@ export default function AuthCallback() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">Error de Autenticación</h2>
             <p className="text-gray-600 text-center mb-6">{error}</p>
-            <button
-              onClick={() => window.location.href = '/'}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:shadow-lg transition-shadow"
-            >
-              Volver al Inicio
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  sessionStorage.clear();
+                  window.location.href = 'https://adres-autenticacion-back.centralspike.com/api/AdresAuth/authorize';
+                }}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:shadow-lg transition-shadow"
+              >
+                Intentar de Nuevo
+              </button>
+              <button
+                onClick={() => {
+                  sessionStorage.clear();
+                  window.location.href = '/';
+                }}
+                className="w-full bg-gray-100 text-gray-700 py-3 px-6 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                Volver al Inicio
+              </button>
+            </div>
           </div>
         </div>
       </div>
