@@ -60,7 +60,12 @@ docker compose up -d
 ### 4. Verificar
 ```bash
 # Ver logs
-docker logs -f adres-api
+ssh administrator@VPS-PERFORCE
+cd ~/adresPC
+git pull origin stg
+docker compose down
+docker compose build api
+docker compose up -d
 
 # Probar configuración
 curl https://adres-autenticacion-back.centralspike.com/api/AdresAuth/config
@@ -70,31 +75,40 @@ curl https://adres-autenticacion-back.centralspike.com/api/AdresAuth/config
 
 ## 🧪 Probar Autenticación
 
-### 1. Login (con credenciales reales de Autentic Sign)
+### 1. Authorization Code Flow con PKCE (RECOMENDADO)
+
+**Desde el navegador**, navega a:
+```
+https://adres-autenticacion-back.centralspike.com/api/AdresAuth/authorize
+```
+
+Esto te redirigirá a Autentic Sign para login. Después del login exitoso:
+1. Serás redirigido de vuelta al callback
+2. El backend intercambiará el código por tokens
+3. Serás redirigido al frontend con los tokens
+
+**Logs del servidor**:
 ```bash
+docker logs adres-api --tail 50 -f
+```
+
+### 2. Password Grant (NO FUNCIONA - Autentic Sign no lo permite)
+```bash
+# Este endpoint retornará: "unauthorized_client"
 curl -X POST https://adres-autenticacion-back.centralspike.com/api/AdresAuth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "tu-usuario@example.com",
-    "password": "tu-password"
+    "username": "usuario@example.com",
+    "password": "password"
   }'
 ```
 
-**Respuesta esperada:**
+**Respuesta esperada**: 
 ```json
 {
-  "access_token": "eyJhbGci...",
-  "token_type": "Bearer",
-  "expires_in": 3600,
-  "refresh_token": "...",
-  "scope": "openid extended_profile"
+  "error": "unauthorized_client",
+  "error_description": "Password grant is not allowed for this client"
 }
-```
-
-### 2. Usar el Token
-```bash
-curl https://adres-autenticacion-back.centralspike.com/api/AdresAuth/me \
-  -H "Authorization: Bearer TU_ACCESS_TOKEN"
 ```
 
 ---
@@ -123,22 +137,27 @@ curl https://adres-autenticacion-back.centralspike.com/api/AdresAuth/me \
 
 ## 🔄 Flujos de Autenticación Disponibles
 
-### Flujo 1: Password Grant (Implementado)
+### ✅ Flujo 1: Authorization Code con PKCE (Implementado y Recomendado)
 ```
-Frontend → POST /api/AdresAuth/login
-        → Backend → POST https://idp.autenticsign.com/connect/token
-        → Backend ← access_token
-Frontend ← access_token
+Frontend → GET /api/AdresAuth/authorize
+        → Backend genera code_verifier y code_challenge (PKCE)
+        → Backend guarda code_verifier en sesión
+        → Redirect a https://idp.autenticsign.com/connect/authorize
+           con code_challenge y code_challenge_method=S256
+        → User Login en Autentic Sign
+        → Redirect a /api/AdresAuth/callback?code=...
+Backend → Recupera code_verifier de sesión
+        → POST https://idp.autenticsign.com/connect/token
+           con code_verifier
+Frontend ← Redirect con access_token en URL
 ```
 
-### Flujo 2: Authorization Code (Pendiente)
+**📖 Documentación completa**: Ver `PKCE_AUTHORIZATION_CODE_FLOW.md`
+
+### ❌ Flujo 2: Password Grant (NO SOPORTADO por Autentic Sign)
 ```
-Frontend → GET https://idp.autenticsign.com/connect/authorize
-        → User Login en Autentic Sign
-        → Redirect a /auth/callback?code=...
-Frontend → POST /api/AdresAuth/token con code
-        → Backend → POST https://idp.autenticsign.com/connect/token
-Frontend ← access_token
+Este flujo está deprecado y Autentic Sign no lo permite.
+Error: "unauthorized_client"
 ```
 
 ---
@@ -165,7 +184,10 @@ Frontend ← access_token
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
-| `/api/AdresAuth/login` | POST | Login con usuario/password |
+| `/api/AdresAuth/authorize` | GET | **[NUEVO]** Inicia Authorization Code flow con PKCE |
+| `/api/AdresAuth/callback` | GET | **[NUEVO]** Callback OAuth - intercambia código por token |
+| `/api/AdresAuth/token` | POST | **[NUEVO]** Intercambia código por token (para frontend) |
+| `/api/AdresAuth/login` | POST | ~~Login con usuario/password~~ (DEPRECADO - no soportado) |
 | `/api/AdresAuth/refresh` | POST | Renovar access token |
 | `/api/AdresAuth/logout` | POST | Cerrar sesión |
 | `/api/AdresAuth/me` | GET | Info usuario actual |
@@ -183,34 +205,54 @@ Frontend ← access_token
 - [x] Client ID configurado
 - [x] Scopes configurados
 - [x] Redirect URI configurado
+- [x] **PKCE implementado** (code_challenge, code_verifier)
+- [x] **Sesiones habilitadas** para guardar code_verifier
 - [ ] Pull en servidor
 - [ ] Reconstruir contenedores
-- [ ] Probar login con credenciales reales
+- [ ] Probar Authorization Code flow con PKCE
 - [ ] Verificar CORS desde frontend
-- [ ] Probar flujo completo
+- [ ] Actualizar frontend para usar nuevo flujo
+- [ ] Probar flujo completo end-to-end
 
 ---
 
 ## 🔍 Troubleshooting
 
+### Error: "code_challenge_required"
+✅ **SOLUCIONADO**: Implementado soporte PKCE
+- Backend genera automáticamente `code_verifier` y `code_challenge`
+- Se incluye `code_challenge_method=S256` en la URL de autorización
+
+### Error: "unauthorized_client"
+**Causa**: Intentando usar Password Grant (grant_type=password)
+**Solución**: ✅ Usar Authorization Code flow (`GET /api/AdresAuth/authorize`)
+
 ### Error: "invalid_client"
-- Verificar que `ClientId` sea correcto
-- Si Autentic Sign requiere `client_secret`, agregarlo
+- Verificar que `ClientId` sea correcto: `410c8553-f9e4-44b8-90e1-234dd7a8bcd4`
+- Si Autentic Sign requiere `client_secret`, agregarlo en variables de entorno
 
 ### Error: "invalid_scope"
 - Verificar que los scopes sean exactamente: `openid extended_profile`
 - Revisar documentación de Autentic Sign para scopes disponibles
 
 ### Error: "invalid_grant"
-- Credenciales de usuario incorrectas
-- Verificar que el usuario exista en Autentic Sign
+- Código de autorización ya usado o expirado
+- El `code_verifier` no coincide con el `code_challenge` original
+- Reintentar el flujo completo desde `/authorize`
 
 ### Error: "redirect_uri_mismatch"
 - Verificar que el Redirect URI esté registrado en Autentic Sign
 - Debe ser exactamente: `https://adres-autenticacion.centralspike.com/auth/callback`
 
+### Error: "PKCE code verifier not found in session"
+- La sesión expiró (timeout de 10 minutos)
+- Las cookies de sesión no se están compartiendo entre requests
+- Solución: Reiniciar el flujo desde `/authorize`
+
 ---
 
-**Estado**: ✅ Configuración Lista
+**Estado**: ✅ Configuración Lista + PKCE Implementado
 **Servidor IDP**: Autentic Sign (https://idp.autenticsign.com)
-**Protocolo**: OpenID Connect / OAuth 2.0
+**Protocolo**: OpenID Connect / OAuth 2.0 con PKCE (RFC 7636)
+**Flujo Activo**: Authorization Code con PKCE
+**Documentación Completa**: Ver `PKCE_AUTHORIZATION_CODE_FLOW.md`
