@@ -6,6 +6,10 @@ import { Button } from '../components/Button';
 export default function HomePage() {
   const navigate = useNavigate();
 
+  const handleLogin = () => {
+    window.location.href = 'https://adres-autenticacion-back.centralspike.com/api/AdresAuth/authorize';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Navbar minimalista */}
@@ -20,7 +24,7 @@ export default function HomePage() {
                 ADRES
               </span>
             </div>
-            <Button onClick={() => navigate('/selector')} size="sm">
+            <Button onClick={handleLogin} size="sm">
               Acceder
             </Button>
           </div>
@@ -48,7 +52,7 @@ export default function HomePage() {
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
-              onClick={() => navigate('/selector')}
+              onClick={handleLogin}
               size="lg"
               className="text-lg group"
             >
