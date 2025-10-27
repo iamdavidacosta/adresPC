@@ -77,6 +77,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             options.MetadataAddress = jwksUrl;
             options.Authority = jwtAuthority;
             options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+            
+            // Configurar validación de tokens
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = jwtAuthority,
+                ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience),
+                ValidAudiences = new[] { jwtAudience, $"{jwtAuthority}/resources" }, // Aceptar múltiples audiences
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                NameClaimType = "preferred_username",
+                RoleClaimType = "roles"
+            };
         }
         else if (!string.IsNullOrWhiteSpace(pemPath) && File.Exists(pemPath))
         {
@@ -106,19 +119,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 ValidateAudience = false,
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = false,
-                RequireSignedTokens = false
+                RequireSignedTokens = false,
+                NameClaimType = "preferred_username",
+                RoleClaimType = "roles"
             };
         }
 
-        options.TokenValidationParameters.NameClaimType = "preferred_username";
-        options.TokenValidationParameters.RoleClaimType = "roles";
-
+        // Agregar logging de errores de autenticación
         options.Events = new JwtBearerEvents
         {
             OnAuthenticationFailed = context =>
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                logger.LogError(context.Exception, "Error al autenticar token JWT");
+                logger.LogError(context.Exception, "❌ Error al autenticar token JWT");
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogInformation("✅ Token JWT validado correctamente");
                 return Task.CompletedTask;
             }
         };
