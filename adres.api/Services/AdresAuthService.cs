@@ -231,6 +231,10 @@ public class AdresAuthService : IAdresAuthService
             }
 
             _logger.LogInformation("✅ Código intercambiado exitosamente por token");
+            _logger.LogInformation("  📋 Access Token recibido: {HasToken}", !string.IsNullOrEmpty(authResponse.AccessToken));
+            _logger.LogInformation("  📋 Refresh Token recibido: {HasToken}", !string.IsNullOrEmpty(authResponse.RefreshToken));
+            _logger.LogInformation("  📋 ID Token recibido: {HasToken}", !string.IsNullOrEmpty(authResponse.IdToken));
+            _logger.LogInformation("  📋 Scopes: {Scopes}", authResponse.Scope);
             
             return authResponse;
         }

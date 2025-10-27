@@ -434,18 +434,24 @@ public class AdresAuthController : ControllerBase
             // Obtener información del usuario desde el endpoint UserInfo de Autentic Sign
             var userInfo = await _adresAuthService.GetUserInfoAsync(accessToken);
 
+            _logger.LogInformation("📊 UserInfo recibido: {UserInfo}", System.Text.Json.JsonSerializer.Serialize(userInfo));
+
             if (userInfo == null || !userInfo.Any())
             {
                 return StatusCode(500, new { error = "userinfo_failed", message = "No se pudo obtener información del usuario" });
             }
 
             // Extraer información relevante
+            var sub = userInfo.GetValueOrDefault("sub")?.ToString();
             var username = userInfo.GetValueOrDefault("preferred_username")?.ToString()
+                        ?? userInfo.GetValueOrDefault("username")?.ToString()
                         ?? userInfo.GetValueOrDefault("name")?.ToString()
-                        ?? userInfo.GetValueOrDefault("sub")?.ToString();
+                        ?? sub;
 
             var email = userInfo.GetValueOrDefault("email")?.ToString();
-            var name = userInfo.GetValueOrDefault("name")?.ToString();
+            var name = userInfo.GetValueOrDefault("name")?.ToString()
+                     ?? userInfo.GetValueOrDefault("given_name")?.ToString()
+                     ?? username;
 
             // Extraer roles de los claims del JWT
             var roles = User.FindAll(ClaimTypes.Role)
