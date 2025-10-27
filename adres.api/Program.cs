@@ -78,9 +78,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         // TODO: Ajustar según tu autenticador externo (JWKS o PEM)
-        if (useJwks && !string.IsNullOrWhiteSpace(jwksUrl))
+        if (useJwks && !string.IsNullOrWhiteSpace(jwtAuthority))
         {
-            // Opción 1: Usar JWKS endpoint
+            // Opción 1: Usar OpenID Connect Discovery (Authority)
+            // Esto descarga automáticamente /.well-known/openid-configuration
+            // y obtiene el jwks_uri de ahí
             options.Authority = jwtAuthority;
             options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
             
@@ -97,13 +99,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 RoleClaimType = "roles"
             };
             
-            // Configurar para obtener las claves del JWKS
-            options.ConfigurationManager = new Microsoft.IdentityModel.Protocols.ConfigurationManager<OpenIdConnectConfiguration>(
-                jwksUrl,
-                new OpenIdConnectConfigurationRetriever(),
-                new HttpDocumentRetriever());
-            
-            Console.WriteLine($"✅ JWT configurado con JWKS: {jwksUrl}");
+            Console.WriteLine($"✅ JWT configurado con Authority: {jwtAuthority}");
+            Console.WriteLine($"   Descargará configuración desde: {jwtAuthority}/.well-known/openid-configuration");
         }
         else if (!string.IsNullOrWhiteSpace(pemPath) && File.Exists(pemPath))
         {
@@ -142,6 +139,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         // Agregar logging de errores de autenticación
         options.Events = new JwtBearerEvents
         {
+            OnMessageReceived = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogInformation($"📨 Token recibido para validación");
+                return Task.CompletedTask;
+            },
             OnAuthenticationFailed = context =>
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
