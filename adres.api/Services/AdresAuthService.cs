@@ -192,17 +192,34 @@ public class AdresAuthService : IAdresAuthService
 
             var content = new FormUrlEncodedContent(request);
             
-            _logger.LogInformation("Intercambiando código de autorización por token en {Endpoint} con PKCE", TokenEndpoint);
+            _logger.LogInformation("🔄 Intercambiando código de autorización por token en {Endpoint} con PKCE", TokenEndpoint);
+            _logger.LogInformation("  📍 Redirect URI: {RedirectUri}", redirectUri);
+            _logger.LogInformation("  🔑 Client ID: {ClientId}", ClientId);
+            _logger.LogInformation("  📝 Code (primeros 20 chars): {Code}...", code.Substring(0, Math.Min(20, code.Length)));
+            _logger.LogInformation("  ✅ Code Verifier (primeros 10 chars): {CodeVerifier}...", codeVerifier.Substring(0, Math.Min(10, codeVerifier.Length)));
 
             var response = await _httpClient.PostAsync(TokenEndpoint, content);
             var responseBody = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Error intercambiando código: {Status} - {Body}", response.StatusCode, responseBody);
+                _logger.LogWarning("❌ Error intercambiando código: {Status}", response.StatusCode);
+                _logger.LogWarning("📄 Response body: {Body}", responseBody);
+                _logger.LogWarning("🔍 Request data enviado:");
+                _logger.LogWarning("   - grant_type: authorization_code");
+                _logger.LogWarning("   - code: {Code}...", code.Substring(0, Math.Min(20, code.Length)));
+                _logger.LogWarning("   - redirect_uri: {RedirectUri}", redirectUri);
+                _logger.LogWarning("   - client_id: {ClientId}", ClientId);
+                _logger.LogWarning("   - code_verifier: {CodeVerifier}...", codeVerifier.Substring(0, Math.Min(10, codeVerifier.Length)));
+                _logger.LogWarning("   - client_secret: {HasSecret}", string.IsNullOrWhiteSpace(ClientSecret) ? "NO" : "SÍ (oculto)");
                 
                 var errorResponse = JsonSerializer.Deserialize<AdresErrorResponse>(responseBody);
-                throw new UnauthorizedAccessException(errorResponse?.ErrorDescription ?? "Code exchange failed");
+                var errorMsg = errorResponse?.ErrorDescription;
+                if (string.IsNullOrWhiteSpace(errorMsg))
+                {
+                    errorMsg = $"Code exchange failed. Server response: {responseBody}";
+                }
+                throw new UnauthorizedAccessException(errorMsg);
             }
 
             var authResponse = JsonSerializer.Deserialize<AdresAuthResponse>(responseBody);
