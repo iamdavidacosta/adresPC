@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.OpenApi.Models;
 using adres.api.Data;
 using adres.api.Data.Seed;
@@ -67,6 +69,11 @@ builder.Services.AddCors(options =>
 });
 
 // Configurar autenticación JWT
+Console.WriteLine($"🔐 Configurando JWT Authentication:");
+Console.WriteLine($"  Authority: {jwtAuthority}");
+Console.WriteLine($"  JWKS URL: {jwksUrl}");
+Console.WriteLine($"  Audience: {jwtAudience}");
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -74,7 +81,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         if (useJwks && !string.IsNullOrWhiteSpace(jwksUrl))
         {
             // Opción 1: Usar JWKS endpoint
-            options.MetadataAddress = jwksUrl;
             options.Authority = jwtAuthority;
             options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
             
@@ -90,6 +96,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 NameClaimType = "preferred_username",
                 RoleClaimType = "roles"
             };
+            
+            // Configurar para obtener las claves del JWKS
+            options.ConfigurationManager = new Microsoft.IdentityModel.Protocols.ConfigurationManager<OpenIdConnectConfiguration>(
+                jwksUrl,
+                new OpenIdConnectConfigurationRetriever(),
+                new HttpDocumentRetriever());
+            
+            Console.WriteLine($"✅ JWT configurado con JWKS: {jwksUrl}");
         }
         else if (!string.IsNullOrWhiteSpace(pemPath) && File.Exists(pemPath))
         {
