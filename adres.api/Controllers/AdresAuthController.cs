@@ -415,84 +415,64 @@ public class AdresAuthController : ControllerBase
     /// Obtiene información del usuario autenticado actual
     /// GET /api/AdresAuth/me
     /// Headers: Authorization: Bearer {access_token}
-    ///          X-ID-Token: {id_token} (opcional, recomendado para obtener perfil completo)
     /// </summary>
     [HttpGet("me")]
     [Authorize]
-    public IActionResult GetCurrentUser()
+    public async Task<IActionResult> GetCurrentUser()
     {
-        // Intentar obtener claims del access_token (del User.Claims)
-        var username = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-                      ?? User.FindFirst("preferred_username")?.Value
-                      ?? User.FindFirst("sub")?.Value
-                      ?? User.Identity?.Name;
-        
-        var email = User.FindFirst(ClaimTypes.Email)?.Value 
-                   ?? User.FindFirst("email")?.Value;
-        
-        var name = User.FindFirst(ClaimTypes.Name)?.Value 
-                  ?? User.FindFirst("name")?.Value;
-
-        // Si hay un ID Token en el header X-ID-Token, decodificarlo para obtener más info
-        var idTokenHeader = Request.Headers["X-ID-Token"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(idTokenHeader))
+        try
         {
-            try
+            // Obtener el access_token del header Authorization
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(authHeader) || !authHeader.StartsWith("Bearer "))
             {
-                // Decodificar el ID Token (solo el payload, sin validar firma ya que confiamos en el access_token)
-                var parts = idTokenHeader.Split('.');
-                if (parts.Length == 3)
-                {
-                    var payload = parts[1];
-                    // Agregar padding si es necesario
-                    payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
-                    var jsonBytes = Convert.FromBase64String(payload);
-                    var json = Encoding.UTF8.GetString(jsonBytes);
-                    var idClaims = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(json);
+                return Unauthorized(new { error = "missing_token", message = "No se proporcionó un token de acceso" });
+            }
 
-                    if (idClaims != null)
-                    {
-                        // Sobrescribir con claims del ID Token si existen
-                        if (string.IsNullOrWhiteSpace(email) && idClaims.TryGetValue("email", out var emailClaim))
-                        {
-                            email = emailClaim.GetString();
-                        }
-                        if (string.IsNullOrWhiteSpace(name) && idClaims.TryGetValue("name", out var nameClaim))
-                        {
-                            name = nameClaim.GetString();
-                        }
-                        if (string.IsNullOrWhiteSpace(username) && idClaims.TryGetValue("preferred_username", out var usernameClaim))
-                        {
-                            username = usernameClaim.GetString();
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
+            var accessToken = authHeader.Substring("Bearer ".Length).Trim();
+
+            // Obtener información del usuario desde el endpoint UserInfo de Autentic Sign
+            var userInfo = await _adresAuthService.GetUserInfoAsync(accessToken);
+
+            if (userInfo == null || !userInfo.Any())
             {
-                _logger.LogWarning(ex, "No se pudo decodificar el ID Token del header X-ID-Token");
+                return StatusCode(500, new { error = "userinfo_failed", message = "No se pudo obtener información del usuario" });
             }
+
+            // Extraer información relevante
+            var username = userInfo.GetValueOrDefault("preferred_username")?.ToString()
+                        ?? userInfo.GetValueOrDefault("name")?.ToString()
+                        ?? userInfo.GetValueOrDefault("sub")?.ToString();
+
+            var email = userInfo.GetValueOrDefault("email")?.ToString();
+            var name = userInfo.GetValueOrDefault("name")?.ToString();
+
+            // Extraer roles de los claims del JWT
+            var roles = User.FindAll(ClaimTypes.Role)
+                           .Select(c => c.Value)
+                           .Concat(User.FindAll("roles").Select(c => c.Value))
+                           .Distinct()
+                           .ToList();
+
+            var permissions = User.FindAll("permissions")
+                                 .Select(c => c.Value)
+                                 .ToList();
+
+            return Ok(new
+            {
+                username,
+                email,
+                name,
+                roles,
+                permissions,
+                authenticated = true
+            });
         }
-
-        var roles = User.FindAll(ClaimTypes.Role)
-                       .Select(c => c.Value)
-                       .Concat(User.FindAll("roles").Select(c => c.Value))
-                       .Distinct()
-                       .ToList();
-
-        var permissions = User.FindAll("permissions")
-                             .Select(c => c.Value)
-                             .ToList();
-
-        return Ok(new
+        catch (Exception ex)
         {
-            username,
-            email,
-            name,
-            roles,
-            permissions,
-            authenticated = true
-        });
+            _logger.LogError(ex, "Error obteniendo información del usuario");
+            return StatusCode(500, new { error = "internal_error", message = "Error interno del servidor" });
+        }
     }
 }
 

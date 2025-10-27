@@ -18,6 +18,7 @@ public interface IAdresAuthService
     Task<AdresTokenClaims> ValidateTokenAsync(string accessToken);
     Task<JwksResponse> GetJwksAsync();
     Task<bool> RevokeTokenAsync(string token);
+    Task<Dictionary<string, object>> GetUserInfoAsync(string accessToken);
 }
 
 public class AdresAuthService : IAdresAuthService
@@ -358,6 +359,38 @@ public class AdresAuthService : IAdresAuthService
         {
             _logger.LogError(ex, "Error obteniendo JWKS");
             throw new InvalidOperationException("Unable to retrieve JWKS", ex);
+        }
+    }
+
+    /// <summary>
+    /// Obtiene información del usuario desde el endpoint UserInfo de Autentic Sign
+    /// </summary>
+    public async Task<Dictionary<string, object>> GetUserInfoAsync(string accessToken)
+    {
+        try
+        {
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
+            
+            var response = await _httpClient.GetAsync(UserInfoEndpoint);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Error obteniendo UserInfo: {Status}", response.StatusCode);
+                return new Dictionary<string, object>();
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var userInfo = JsonSerializer.Deserialize<Dictionary<string, object>>(responseBody);
+            
+            _logger.LogInformation("✅ UserInfo obtenido exitosamente");
+            
+            return userInfo ?? new Dictionary<string, object>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error obteniendo UserInfo");
+            return new Dictionary<string, object>();
         }
     }
 

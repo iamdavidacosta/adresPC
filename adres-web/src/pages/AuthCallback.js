@@ -94,8 +94,7 @@ export default function AuthCallback() {
         // Obtener información del usuario
         const userResponse = await fetch('https://adres-autenticacion-back.centralspike.com/api/AdresAuth/me', {
           headers: {
-            'Authorization': `Bearer ${tokenData.access_token}`,
-            'X-ID-Token': tokenData.id_token || '' // Enviar ID Token para obtener perfil completo
+            'Authorization': `Bearer ${tokenData.access_token}`
           }
         });
 
