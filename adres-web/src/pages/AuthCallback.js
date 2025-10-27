@@ -89,6 +89,20 @@ export default function AuthCallback() {
         }
         if (tokenData.id_token) {
           localStorage.setItem('id_token', tokenData.id_token);
+          
+          // 🔍 DECODIFICAR ID TOKEN para ver su contenido
+          try {
+            const base64Payload = tokenData.id_token.split('.')[1];
+            const payload = JSON.parse(atob(base64Payload));
+            console.log('🆔 Contenido del ID Token:', payload);
+            console.log('📧 Email en ID token:', payload.email || 'NO DISPONIBLE');
+            console.log('👤 Name en ID token:', payload.name || 'NO DISPONIBLE');
+            console.log('🏷️ Preferred username en ID token:', payload.preferred_username || 'NO DISPONIBLE');
+          } catch (e) {
+            console.error('Error decodificando id_token:', e);
+          }
+        } else {
+          console.warn('⚠️ NO se recibió id_token en la respuesta');
         }
 
         // Obtener información del usuario
