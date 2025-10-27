@@ -176,6 +176,7 @@ public class AdresAuthController : ControllerBase
                 token_type = authResponse.TokenType,
                 expires_in = authResponse.ExpiresIn,
                 refresh_token = authResponse.RefreshToken,
+                id_token = authResponse.IdToken,
                 scope = authResponse.Scope
             });
         }
@@ -413,11 +414,14 @@ public class AdresAuthController : ControllerBase
     /// <summary>
     /// Obtiene información del usuario autenticado actual
     /// GET /api/AdresAuth/me
+    /// Headers: Authorization: Bearer {access_token}
+    ///          X-ID-Token: {id_token} (opcional, recomendado para obtener perfil completo)
     /// </summary>
     [HttpGet("me")]
     [Authorize]
     public IActionResult GetCurrentUser()
     {
+        // Intentar obtener claims del access_token (del User.Claims)
         var username = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
                       ?? User.FindFirst("preferred_username")?.Value
                       ?? User.FindFirst("sub")?.Value
@@ -428,6 +432,47 @@ public class AdresAuthController : ControllerBase
         
         var name = User.FindFirst(ClaimTypes.Name)?.Value 
                   ?? User.FindFirst("name")?.Value;
+
+        // Si hay un ID Token en el header X-ID-Token, decodificarlo para obtener más info
+        var idTokenHeader = Request.Headers["X-ID-Token"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(idTokenHeader))
+        {
+            try
+            {
+                // Decodificar el ID Token (solo el payload, sin validar firma ya que confiamos en el access_token)
+                var parts = idTokenHeader.Split('.');
+                if (parts.Length == 3)
+                {
+                    var payload = parts[1];
+                    // Agregar padding si es necesario
+                    payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+                    var jsonBytes = Convert.FromBase64String(payload);
+                    var json = Encoding.UTF8.GetString(jsonBytes);
+                    var idClaims = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(json);
+
+                    if (idClaims != null)
+                    {
+                        // Sobrescribir con claims del ID Token si existen
+                        if (string.IsNullOrWhiteSpace(email) && idClaims.TryGetValue("email", out var emailClaim))
+                        {
+                            email = emailClaim.GetString();
+                        }
+                        if (string.IsNullOrWhiteSpace(name) && idClaims.TryGetValue("name", out var nameClaim))
+                        {
+                            name = nameClaim.GetString();
+                        }
+                        if (string.IsNullOrWhiteSpace(username) && idClaims.TryGetValue("preferred_username", out var usernameClaim))
+                        {
+                            username = usernameClaim.GetString();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo decodificar el ID Token del header X-ID-Token");
+            }
+        }
 
         var roles = User.FindAll(ClaimTypes.Role)
                        .Select(c => c.Value)
