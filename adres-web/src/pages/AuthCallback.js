@@ -9,20 +9,23 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        // Prevenir múltiples ejecuciones
-        const processedKey = 'oauth_callback_processed';
-        if (sessionStorage.getItem(processedKey)) {
-          console.log('Callback ya procesado, redirigiendo...');
-          navigate('/dashboard');
-          return;
-        }
-
         // Obtener parámetros de la URL
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
         const state = params.get('state');
         const errorParam = params.get('error');
         const errorDescription = params.get('error_description');
+        
+        // Solo verificar si ya fue procesado si tenemos un código nuevo
+        const processedKey = 'oauth_callback_processed';
+        const lastProcessedCode = sessionStorage.getItem('last_oauth_code');
+        
+        // Si es el mismo código que ya procesamos, redirigir sin procesar de nuevo
+        if (code && lastProcessedCode === code) {
+          console.log('Callback ya procesado para este código, redirigiendo...');
+          navigate('/dashboard');
+          return;
+        }
 
         // Verificar si hay error en la respuesta de OAuth
         if (errorParam) {
@@ -121,8 +124,8 @@ export default function AuthCallback() {
         // Guardar información del usuario en localStorage
         localStorage.setItem('user', JSON.stringify(userData));
         
-        // Marcar callback como procesado
-        sessionStorage.setItem(processedKey, 'true');
+        // Marcar callback como procesado y guardar el código usado
+        sessionStorage.setItem('last_oauth_code', code);
         
         console.log('✅ Autenticación completada exitosamente');
 

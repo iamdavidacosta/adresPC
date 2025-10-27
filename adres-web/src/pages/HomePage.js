@@ -7,6 +7,8 @@ export default function HomePage() {
   const navigate = useNavigate();
 
   const handleLogin = () => {
+    // Limpiar cualquier sesión previa
+    sessionStorage.removeItem('last_oauth_code');
     window.location.href = 'https://adres-autenticacion-back.centralspike.com/api/AdresAuth/authorize';
   };
 
