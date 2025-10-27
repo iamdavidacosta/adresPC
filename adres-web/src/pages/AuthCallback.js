@@ -71,19 +71,30 @@ export default function AuthCallback() {
 
         const tokenData = await tokenResponse.json();
 
-        // Guardar tokens en localStorage
-        localStorage.setItem('access_token', tokenData.accessToken);
-        if (tokenData.refreshToken) {
-          localStorage.setItem('refresh_token', tokenData.refreshToken);
+        console.log('✅ Tokens recibidos:', {
+          access_token: tokenData.access_token?.substring(0, 20) + '...',
+          token_type: tokenData.token_type,
+          expires_in: tokenData.expires_in
+        });
+
+        // Guardar tokens en localStorage (usando snake_case que viene del backend)
+        if (tokenData.access_token) {
+          localStorage.setItem('access_token', tokenData.access_token);
+        } else {
+          throw new Error('No se recibió access_token del servidor');
         }
-        if (tokenData.idToken) {
-          localStorage.setItem('id_token', tokenData.idToken);
+        
+        if (tokenData.refresh_token) {
+          localStorage.setItem('refresh_token', tokenData.refresh_token);
+        }
+        if (tokenData.id_token) {
+          localStorage.setItem('id_token', tokenData.id_token);
         }
 
         // Obtener información del usuario
         const userResponse = await fetch('https://adres-autenticacion-back.centralspike.com/api/AdresAuth/me', {
           headers: {
-            'Authorization': `Bearer ${tokenData.accessToken}`
+            'Authorization': `Bearer ${tokenData.access_token}`
           }
         });
 
