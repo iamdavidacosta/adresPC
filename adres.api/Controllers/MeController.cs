@@ -24,6 +24,14 @@ public class MeController : ControllerBase
     {
         try
         {
+            // Log de todos los claims recibidos
+            _logger.LogInformation("=== CLAIMS RECIBIDOS DEL TOKEN ===");
+            foreach (var claim in User.Claims)
+            {
+                _logger.LogInformation($"  {claim.Type}: {claim.Value}");
+            }
+            _logger.LogInformation("=================================");
+            
             // Extraer sub y email del token JWT
             var sub = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                       ?? User.FindFirst("sub")?.Value;
