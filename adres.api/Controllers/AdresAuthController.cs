@@ -33,11 +33,10 @@ public class AdresAuthController : ControllerBase
     [AllowAnonymous]
     public IActionResult Authorize([FromQuery] string? returnUrl = null)
     {
-        // Generar PKCE
-        var (authUrl, codeVerifier) = _adresAuthService.GetAuthorizationUrl(
-            _configuration["AdresAuth:RedirectUri"] ?? "https://adres-autenticacion.centralspike.com/auth/callback",
-            ""
-        );
+        var redirectUri = _configuration["AdresAuth:RedirectUri"] ?? "https://adres-autenticacion.centralspike.com/auth/callback";
+        
+        // Generar PKCE UNA SOLA VEZ
+        var (authUrlWithoutState, codeVerifier) = _adresAuthService.GetAuthorizationUrl(redirectUri, "");
         
         // Incluir code_verifier en el state para que el frontend lo reciba
         var stateData = new
@@ -49,13 +48,13 @@ public class AdresAuthController : ControllerBase
         var stateJson = System.Text.Json.JsonSerializer.Serialize(stateData);
         var state = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateJson));
         
-        // Regenerar authUrl con el state que incluye el code_verifier
-        (authUrl, _) = _adresAuthService.GetAuthorizationUrl(
-            _configuration["AdresAuth:RedirectUri"] ?? "https://adres-autenticacion.centralspike.com/auth/callback",
-            state
-        );
+        // Agregar el state a la URL (sin regenerar el code_verifier)
+        var authUrl = authUrlWithoutState.Contains("?") 
+            ? $"{authUrlWithoutState}&state={Uri.EscapeDataString(state)}"
+            : $"{authUrlWithoutState}?state={Uri.EscapeDataString(state)}";
         
         _logger.LogInformation("🔄 Redirigiendo a Autentic Sign con PKCE");
+        _logger.LogInformation("  📍 Code Verifier (primeros 10): {CV}...", codeVerifier.Substring(0, Math.Min(10, codeVerifier.Length)));
 
         return Redirect(authUrl);
     }
