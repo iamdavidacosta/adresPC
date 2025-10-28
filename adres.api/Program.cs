@@ -147,19 +147,33 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             OnMessageReceived = context =>
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                var authHeader = context.Request.Headers["Authorization"].ToString();
+                var token = context.Token;
+                
                 logger.LogInformation($"📨 Token recibido para validación");
+                logger.LogInformation($"  Authorization Header: {(string.IsNullOrWhiteSpace(authHeader) ? "(vacío)" : authHeader.Substring(0, Math.Min(50, authHeader.Length)) + "...")}");
+                logger.LogInformation($"  Token extraído: {(string.IsNullOrWhiteSpace(token) ? "(vacío)" : token.Substring(0, Math.Min(50, token.Length)) + "...")}");
+                
                 return Task.CompletedTask;
             },
             OnAuthenticationFailed = context =>
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
                 logger.LogError(context.Exception, "❌ Error al autenticar token JWT");
+                logger.LogError($"  Path: {context.Request.Path}");
+                logger.LogError($"  Token recibido: {(string.IsNullOrWhiteSpace(context.Request.Headers["Authorization"]) ? "(sin header)" : "presente")}");
                 return Task.CompletedTask;
             },
             OnTokenValidated = context =>
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                var sub = context.Principal?.FindFirst("sub")?.Value 
+                       ?? context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                
                 logger.LogInformation("✅ Token JWT validado correctamente");
+                logger.LogInformation($"  Sub: {sub}");
+                logger.LogInformation($"  Claims count: {context.Principal?.Claims.Count()}");
+                
                 return Task.CompletedTask;
             }
         };
