@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using adres.api.Services;
 using adres.api.Models;
 using System.Security.Claims;
@@ -422,56 +423,77 @@ public class AdresAuthController : ControllerBase
     {
         try
         {
-            // Obtener el access_token del header Authorization
-            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(authHeader) || !authHeader.StartsWith("Bearer "))
+            // Obtener el 'sub' del JWT (que viene del access_token validado)
+            var sub = User.FindFirst("sub")?.Value 
+                   ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrWhiteSpace(sub))
             {
-                return Unauthorized(new { error = "missing_token", message = "No se proporcionó un token de acceso" });
+                return Unauthorized(new { error = "invalid_token", message = "No se pudo obtener el subject del token" });
             }
 
-            var accessToken = authHeader.Substring("Bearer ".Length).Trim();
+            _logger.LogInformation("👤 Buscando usuario con sub: {Sub}", sub);
 
-            // Obtener información del usuario desde el endpoint UserInfo de Autentic Sign
-            var userInfo = await _adresAuthService.GetUserInfoAsync(accessToken);
+            // Buscar el usuario en la base de datos por el 'sub' de Autentic Sign
+            var dbContext = HttpContext.RequestServices.GetRequiredService<Data.AdresAuthDbContext>();
+            var user = await dbContext.Users
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                        .ThenInclude(r => r.RolePermissions)
+                            .ThenInclude(rp => rp.Permission)
+                .FirstOrDefaultAsync(u => u.Sub == sub);
 
-            _logger.LogInformation("📊 UserInfo recibido: {UserInfo}", System.Text.Json.JsonSerializer.Serialize(userInfo));
-
-            if (userInfo == null || !userInfo.Any())
+            if (user == null)
             {
-                return StatusCode(500, new { error = "userinfo_failed", message = "No se pudo obtener información del usuario" });
+                _logger.LogWarning("⚠️ Usuario no encontrado en BD con sub: {Sub}", sub);
+                
+                // Usuario autenticado en Autentic Sign pero no existe en nuestra BD
+                return Ok(new
+                {
+                    username = sub,
+                    email = (string?)null,
+                    name = "Usuario Nuevo",
+                    fullName = "Usuario Nuevo",
+                    roles = new List<string>(),
+                    permissions = new List<string>(),
+                    authenticated = true,
+                    isNewUser = true,
+                    message = "Usuario autenticado pero no registrado en el sistema"
+                });
             }
 
-            // Extraer información relevante
-            var sub = userInfo.GetValueOrDefault("sub")?.ToString();
-            var username = userInfo.GetValueOrDefault("preferred_username")?.ToString()
-                        ?? userInfo.GetValueOrDefault("username")?.ToString()
-                        ?? userInfo.GetValueOrDefault("name")?.ToString()
-                        ?? sub;
+            _logger.LogInformation("✅ Usuario encontrado: {FullName} ({Username})", user.FullName, user.Username);
 
-            var email = userInfo.GetValueOrDefault("email")?.ToString();
-            var name = userInfo.GetValueOrDefault("name")?.ToString()
-                     ?? userInfo.GetValueOrDefault("given_name")?.ToString()
-                     ?? username;
+            // Extraer roles y permisos
+            var roles = user.UserRoles
+                .Select(ur => ur.Role.Name)
+                .Distinct()
+                .ToList();
 
-            // Extraer roles de los claims del JWT
-            var roles = User.FindAll(ClaimTypes.Role)
-                           .Select(c => c.Value)
-                           .Concat(User.FindAll("roles").Select(c => c.Value))
-                           .Distinct()
-                           .ToList();
-
-            var permissions = User.FindAll("permissions")
-                                 .Select(c => c.Value)
-                                 .ToList();
+            var permissions = user.UserRoles
+                .SelectMany(ur => ur.Role.RolePermissions)
+                .Select(rp => rp.Permission.Key)
+                .Distinct()
+                .ToList();
 
             return Ok(new
             {
-                username,
-                email,
-                name,
+                username = user.Username,
+                email = user.Email,
+                name = user.FullName,
+                fullName = user.FullName,
+                firstName = user.FirstName,
+                lastName = user.LastName,
+                documentType = user.DocumentType,
+                documentNumber = user.DocumentNumber,
+                phoneNumber = user.PhoneNumber,
+                position = user.Position,
+                department = user.Department,
+                esRepresentanteLegal = user.EsRepresentanteLegal,
                 roles,
                 permissions,
-                authenticated = true
+                authenticated = true,
+                isActive = user.IsActive
             });
         }
         catch (Exception ex)
