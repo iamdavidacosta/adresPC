@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -8,6 +8,7 @@ using Microsoft.OpenApi.Models;
 using adres.api.Data;
 using adres.api.Data.Seed;
 using adres.api.Services;
+using adres.api.Authorization;
 using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -35,8 +36,8 @@ builder.Services.AddDbContext<AdresAuthDbContext>(options =>
 // Configurar servicios
 builder.Services.AddScoped<IUserDirectory, UserDirectory>();
 
-// Registrar el transformador de claims
-builder.Services.AddTransient<IClaimsTransformation, AdresClaimsTransformation>();
+// Registrar el authorization handler personalizado
+builder.Services.AddSingleton<IAuthorizationHandler, RepresentanteLegalAuthorizationHandler>();
 
 // Configurar HttpClient para AdresAuthService
 builder.Services.AddHttpClient<IAdresAuthService, AdresAuthService>();
@@ -169,16 +170,7 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("SoloRepresentanteLegal", policy =>
     {
-        policy.RequireAssertion(context =>
-        {
-            var esClaim = context.User.FindFirst("esRepresentanteLegal")?.Value;
-            if (string.IsNullOrWhiteSpace(esClaim))
-            {
-                return false;
-            }
-            // Aceptar: "true", "True", "1"
-            return esClaim.Equals("true", StringComparison.OrdinalIgnoreCase) || esClaim == "1";
-        });
+        policy.Requirements.Add(new RepresentanteLegalRequirement());
     });
 });
 
