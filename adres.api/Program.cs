@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -33,6 +34,9 @@ builder.Services.AddDbContext<AdresAuthDbContext>(options =>
 
 // Configurar servicios
 builder.Services.AddScoped<IUserDirectory, UserDirectory>();
+
+// Registrar el transformador de claims
+builder.Services.AddTransient<IClaimsTransformation, AdresClaimsTransformation>();
 
 // Configurar HttpClient para AdresAuthService
 builder.Services.AddHttpClient<IAdresAuthService, AdresAuthService>();

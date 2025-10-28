@@ -130,7 +130,7 @@ export default function UserSelector() {
                   <CardHeader>
                     <div className="flex items-start justify-between mb-4">
                       <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-white font-bold text-2xl bg-gradient-to-br ${colorClass}`}>
-                        {user.username.substring(0, 2).toUpperCase()}
+                        {(user.fullName || user.name || user.username).substring(0, 2).toUpperCase()}
                       </div>
                       {user.esRepresentanteLegal && (
                         <div className="flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-semibold">
@@ -139,7 +139,7 @@ export default function UserSelector() {
                         </div>
                       )}
                     </div>
-                    <CardTitle className="text-xl">{user.username}</CardTitle>
+                    <CardTitle className="text-xl">{user.fullName || user.name || user.username}</CardTitle>
                     <CardDescription className="text-base">{user.email}</CardDescription>
                   </CardHeader>
                   <CardContent>

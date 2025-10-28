@@ -72,7 +72,7 @@ export default function UserDashboard() {
             
             <div className="flex items-center gap-4">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-gray-900">{user.username}</p>
+                <p className="text-sm font-semibold text-gray-900">{user.fullName || user.name || user.username}</p>
                 <p className="text-xs text-gray-500">{user.email}</p>
               </div>
               <Button variant="destructive" size="sm" onClick={handleLogout}>
@@ -88,7 +88,7 @@ export default function UserDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            Hola, {user.username}
+            Hola, {user.fullName || user.name || user.username}
           </h2>
           <p className="text-gray-600">Bienvenido a tu portal de consultas ADRES</p>
         </div>
@@ -200,7 +200,7 @@ export default function UserDashboard() {
             <CardContent className="space-y-4">
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Usuario</label>
-                <p className="text-sm font-medium text-gray-900 mt-1">{user.username}</p>
+                <p className="text-sm font-medium text-gray-900 mt-1">{user.fullName || user.name || user.username}</p>
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Correo</label>
