@@ -424,18 +424,18 @@ public class AdresAuthController : ControllerBase
         try
         {
             // Obtener claims del JWT
-            var sub = User.FindFirst("sub")?.Value 
-                   ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             var email = User.FindFirst("email")?.Value;
             var username = User.FindFirst("preferred_username")?.Value;
             var name = User.FindFirst("name")?.Value;
 
             if (string.IsNullOrWhiteSpace(email))
             {
-                return Unauthorized(new { error = "invalid_token", message = "No se pudo obtener el correo del token" });
+                var allClaims = User.Claims.Select(c => new { c.Type, c.Value }).ToList();
+                _logger.LogWarning("❌ No se pudo obtener el correo del token. Claims recibidos: {@Claims}", allClaims);
+                return Unauthorized(new { error = "invalid_token", message = "No se pudo obtener el correo del token", claims = allClaims });
             }
 
-            _logger.LogInformation("👤 Buscando usuario con sub: {Sub} y email: {Email}", sub, email);
+            _logger.LogInformation("👤 Buscando usuario con email: {Email}", email);
 
             var dbContext = HttpContext.RequestServices.GetRequiredService<Data.AdresAuthDbContext>();
             // Buscar solo por email
