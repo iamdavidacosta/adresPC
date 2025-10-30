@@ -424,7 +424,8 @@ public class AdresAuthController : ControllerBase
         try
         {
             // Obtener claims del JWT
-            var email = User.FindFirst("email")?.Value;
+            var email = User.FindFirst("email")?.Value
+                      ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value;
             var username = User.FindFirst("preferred_username")?.Value;
             var name = User.FindFirst("name")?.Value;
 
