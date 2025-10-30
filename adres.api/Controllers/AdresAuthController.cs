@@ -424,10 +424,12 @@ public class AdresAuthController : ControllerBase
         try
         {
             // Obtener claims del JWT
-            var email = User.FindFirst("email")?.Value
-                      ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value;
-            var username = User.FindFirst("preferred_username")?.Value;
-            var name = User.FindFirst("name")?.Value;
+         var email = User.FindFirst("email")?.Value
+             ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value;
+         var username = User.FindFirst("preferred_username")?.Value;
+         var name = User.FindFirst("name")?.Value;
+         var sub = User.FindFirst("sub")?.Value
+             ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
             if (string.IsNullOrWhiteSpace(email))
             {
@@ -452,6 +454,7 @@ public class AdresAuthController : ControllerBase
             {
                 user = new adres.api.Domain.User
                 {
+                    Sub = sub ?? email,
                     Email = email,
                     Username = username ?? email,
                     FullName = name ?? username ?? email,
@@ -467,7 +470,7 @@ public class AdresAuthController : ControllerBase
                 };
                 dbContext.Users.Add(user);
                 await dbContext.SaveChangesAsync();
-                _logger.LogInformation("🆕 Usuario creado en BD: {Email}", email);
+                _logger.LogInformation("🆕 Usuario creado en BD: {Email} con sub: {Sub}", email, user.Sub);
             }
 
             // Extraer roles y permisos
