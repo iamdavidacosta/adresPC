@@ -423,46 +423,51 @@ public class AdresAuthController : ControllerBase
     {
         try
         {
-            // Obtener el 'sub' del JWT (que viene del access_token validado)
+            // Obtener claims del JWT
             var sub = User.FindFirst("sub")?.Value 
                    ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var email = User.FindFirst("email")?.Value;
+            var username = User.FindFirst("preferred_username")?.Value;
+            var name = User.FindFirst("name")?.Value;
 
-            if (string.IsNullOrWhiteSpace(sub))
+            if (string.IsNullOrWhiteSpace(email))
             {
-                return Unauthorized(new { error = "invalid_token", message = "No se pudo obtener el subject del token" });
+                return Unauthorized(new { error = "invalid_token", message = "No se pudo obtener el correo del token" });
             }
 
-            _logger.LogInformation("👤 Buscando usuario con sub: {Sub}", sub);
+            _logger.LogInformation("👤 Buscando usuario con sub: {Sub} y email: {Email}", sub, email);
 
-            // Buscar el usuario en la base de datos por el 'sub' de Autentic Sign
             var dbContext = HttpContext.RequestServices.GetRequiredService<Data.AdresAuthDbContext>();
+            // Buscar solo por email
             var user = await dbContext.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
                         .ThenInclude(r => r.RolePermissions)
                             .ThenInclude(rp => rp.Permission)
-                .FirstOrDefaultAsync(u => u.Sub == sub);
+                .FirstOrDefaultAsync(u => u.Email == email);
 
+            // Si no existe, crear nuevo usuario
             if (user == null)
             {
-                _logger.LogWarning("⚠️ Usuario no encontrado en BD con sub: {Sub}", sub);
-                
-                // Usuario autenticado en Autentic Sign pero no existe en nuestra BD
-                return Ok(new
+                user = new adres.api.Domain.User
                 {
-                    username = sub,
-                    email = (string?)null,
-                    name = "Usuario Nuevo",
-                    fullName = "Usuario Nuevo",
-                    roles = new List<string>(),
-                    permissions = new List<string>(),
-                    authenticated = true,
-                    isNewUser = true,
-                    message = "Usuario autenticado pero no registrado en el sistema"
-                });
+                    Email = email,
+                    Username = username ?? email,
+                    FullName = name ?? username ?? email,
+                    FirstName = name ?? username ?? email,
+                    LastName = "",
+                    DocumentType = "",
+                    DocumentNumber = "",
+                    PhoneNumber = "",
+                    Position = "",
+                    Department = "",
+                    EsRepresentanteLegal = false,
+                    IsActive = true
+                };
+                dbContext.Users.Add(user);
+                await dbContext.SaveChangesAsync();
+                _logger.LogInformation("🆕 Usuario creado en BD: {Email}", email);
             }
-
-            _logger.LogInformation("✅ Usuario encontrado: {FullName} ({Username})", user.FullName, user.Username);
 
             // Extraer roles y permisos
             var roles = user.UserRoles
