@@ -331,6 +331,46 @@ public class AdresAuthController : ControllerBase
     }
 
     /// <summary>
+    /// Obtiene la URL de logout del IdP para redirigir al usuario
+    /// GET /api/AdresAuth/logout-url
+    /// </summary>
+    [HttpGet("logout-url")]
+    [AllowAnonymous]
+    public IActionResult GetLogoutUrl([FromQuery] string? id_token_hint = null, [FromQuery] string? post_logout_redirect_uri = null)
+    {
+        try
+        {
+            var endSessionEndpoint = "https://idp.autenticsign.com/connect/endsession";
+            var defaultPostLogoutRedirectUri = _configuration["AdresAuth:FrontendUrl"] ?? "https://adres-autenticacion.centralspike.com";
+            
+            var logoutUrl = endSessionEndpoint;
+            var queryParams = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(id_token_hint))
+            {
+                queryParams.Add($"id_token_hint={Uri.EscapeDataString(id_token_hint)}");
+            }
+
+            var redirectUri = post_logout_redirect_uri ?? defaultPostLogoutRedirectUri;
+            queryParams.Add($"post_logout_redirect_uri={Uri.EscapeDataString(redirectUri)}");
+
+            if (queryParams.Any())
+            {
+                logoutUrl += "?" + string.Join("&", queryParams);
+            }
+
+            _logger.LogInformation("🔓 Generando URL de logout del IdP: {LogoutUrl}", logoutUrl);
+
+            return Ok(new { logout_url = logoutUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generando URL de logout");
+            return StatusCode(500, new { error = "server_error", error_description = "Error generating logout URL" });
+        }
+    }
+
+    /// <summary>
     /// Obtiene las claves públicas JWKS para validar tokens
     /// GET /api/AdresAuth/jwks
     /// </summary>

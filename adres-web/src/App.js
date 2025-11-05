@@ -5,6 +5,7 @@ import UserSelector from './pages/UserSelector';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import AuthCallback from './pages/AuthCallback';
+import Logout from './pages/Logout';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/auth/logout" element={<Logout />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
