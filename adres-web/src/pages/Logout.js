@@ -33,24 +33,23 @@ function Logout() {
         localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
 
-        // 3. Obtener la URL de logout del IdP
-        const logoutUrlResponse = await fetch(
-          `${API_BASE_URL}/AdresAuth/logout-url?` +
-          `id_token_hint=${encodeURIComponent(idToken || '')}&` +
-          `post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`
-        );
-
-        if (logoutUrlResponse.ok) {
-          const data = await logoutUrlResponse.json();
-          
-          console.log('🔓 Redirigiendo a logout del IdP:', data.logout_url);
-          
-          // 4. Redirigir al endpoint de logout del IdP
-          window.location.href = data.logout_url;
-        } else {
-          // Si falla, redirigir al home
-          navigate('/');
+        // 3. Construir la URL de logout del IdP directamente
+        const endSessionEndpoint = 'https://idp.autenticsign.com/connect/endsession';
+        const postLogoutRedirectUri = window.location.origin; // https://adres-autenticacion.centralspike.com
+        
+        const logoutParams = new URLSearchParams();
+        if (idToken) {
+          logoutParams.append('id_token_hint', idToken);
         }
+        logoutParams.append('post_logout_redirect_uri', postLogoutRedirectUri);
+        
+        const logoutUrl = `${endSessionEndpoint}?${logoutParams.toString()}`;
+        
+        console.log('🔓 Redirigiendo a logout del IdP:', logoutUrl);
+        console.log('📍 Volverá a:', postLogoutRedirectUri);
+        
+        // 4. Redirigir al endpoint de logout del IdP
+        window.location.href = logoutUrl;
       } catch (error) {
         console.error('❌ Error en logout:', error);
         // En caso de error, limpiar y redirigir al home
